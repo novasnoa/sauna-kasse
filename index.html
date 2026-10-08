@@ -272,13 +272,21 @@ function vAbr() {
 const MT = {}; // Mailtexte für „Text kopieren“, nach Schlüssel
 function mailKnopf(namen, adressen, betreff, text) {
   const ad = [...new Set(adressen.filter(Boolean))];
-  if (!ad.length) return `<span class="mut noprint">✉ Keine E-Mail-Adresse hinterlegt (Stammdaten → ${namen}).</span>`;
+  if (!ad.length) return `<span class="mut noprint">✉ Keine E-Mail-Adresse hinterlegt (Stammdaten → ${namen}). Ist der Name dort doppelt angelegt? Dann den Eintrag ohne Adresse entfernen.</span>`;
   const body = encodeURIComponent(text.replace(/\n/g, '\r\n')), su = encodeURIComponent(betreff), an = ad.join(',');
   const k = id(); MT[k] = text;
   const css = 'display:inline-block;padding:8px 12px;border-radius:6px;text-decoration:none;border:1px solid var(--acc);';
   return `<a class="noprint" style="${css}background:var(--acc);color:#fff" href="mailto:${an}?subject=${su}&body=${body}">✉ E-Mail an ${esc(an)}</a>
     <a class="noprint" style="${css}color:var(--acc)" target="_blank" rel="noopener" href="https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(an)}&su=${su}&body=${body}">in Gmail öffnen</a>
     <button class="noprint" type="button" data-act="kopiere" data-v="${k}">Text kopieren</button>`;
+}
+// Kontakt über die Person suchen, nicht nur über die ID: wer „Robert“ zweimal angelegt hat (einmal
+// vor den Kontaktfeldern, einmal mit), sonst findet die Schicht nur den alten Satz ohne Mail.
+function kontakt(liste, i) {
+  const m = S[liste].find(x => x.id === i) || {};
+  if (m.email) return m;
+  const gleich = S[liste].find(x => x.email && (x.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase());
+  return gleich ? { ...m, email: gleich.email, tel: m.tel || gleich.tel, adresse: m.adresse || gleich.adresse } : m;
 }
 function masseurDaten(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
@@ -308,7 +316,7 @@ function masseurAbrechnung(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
   const { bu, tr, um, ti } = masseurDaten(sch, mid);
-  const m = S.mas.find(x => x.id === mid) || {};
+  const m = kontakt('mas', mid);
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
   <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
   <div class="row">${mailKnopf('Masseur*innen', [m.email], 'Abrechnung ' + name('mas', mid) + ' ' + datumDe(sch[0].datum), masseurText(sch, mid))}</div>
@@ -328,7 +336,7 @@ function abrechnung(sch) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   // Zahlungen nach Art
   const arten = [...new Set(zahl.map(z => z.art))];
-  const mas_ = [...new Set(sch.map(s => s.ma))].map(i => S.ma.find(x => x.id === i) || {});
+  const mas_ = [...new Set(sch.map(s => s.ma))].map(i => kontakt('ma', i));
   let h = `<div class="card"><h2>Abrechnung ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
   <div class="row">${mailKnopf('Mitarbeiter*innen', mas_.map(m => m.email), 'Abrechnung ' + datumDe(sch[0].datum), gesamtText(sch))}</div>
   <h3>Einnahmen nach Zahlungsart</h3><table><tr><th>Art</th><th class="r">Rechnung</th><th class="r">Trinkgeld</th><th class="r">Eingenommen</th></tr>
