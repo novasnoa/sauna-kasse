@@ -303,7 +303,7 @@ function masseurAbrechnung(sch, mid) {
   const { bu, tr, um, ti } = masseurDaten(sch, mid);
   const m = S.mas.find(x => x.id === mid) || {};
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
-  <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}</div>
+  <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
   <div class="row">${mailKnopf('Masseur*innen', [m.email], 'Abrechnung ' + name('mas', mid) + ' ' + datumDe(sch[0].datum), masseurText(sch, mid))}</div>
   <h3>Massagen</h3>` + (bu.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Massage</th><th class="r">Preis</th></tr>
   ${bu.map(b => `<tr><td>${b.s.nr}</td><td>${b.zeit}</td><td>${esc(gastText(b.s, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
@@ -359,7 +359,7 @@ function abrechnung(sch) {
 /* ---------- Stammdaten ---------- */
 // Services und Massagen liegen beide in S.lei (eine Liste, Flag „massage“), damit Buchungen und
 // Abrechnung unverändert bleiben – nur die Reiter zeigen sie getrennt.
-const KONTAKT = [['name', 'Name'], ['email', 'E-Mail'], ['tel', 'Telefon']];
+const KONTAKT = [['name', 'Name'], ['email', 'E-Mail'], ['tel', 'Telefon'], ['adresse', 'Adresse (Straße, PLZ Ort)']];
 const STAMM = [
   { id: 'ma', k: 'ma', t: 'Mitarbeiter*innen', f: KONTAKT },
   { id: 'mas', k: 'mas', t: 'Masseur*innen', f: KONTAKT },
@@ -368,7 +368,7 @@ const STAMM = [
   { id: 'war', k: 'war', t: 'Waren', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']] },
   { id: 'kun', k: 'kun', t: 'Kunden', f: [['nummer', 'Schlüsselnr.'], ['name', 'Bezeichnung (optional)']] }
 ];
-const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', preis: 'inputmode="decimal" size="8"' };
+const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
   const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
@@ -379,7 +379,7 @@ function vStamm() {
   const liste = aktive(g.k).filter(g.filter || (() => true));
   return tabs + `<div class="card"><h2>${g.t}</h2>
   <table>${liste.map(x => `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : esc(x.name)}
-      ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}</td>
+      ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}${x.adresse ? `<div class="mut">🏠 ${esc(x.adresse)}</div>` : ''}</td>
     <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
     <td class="r"><button data-act="aendern" data-g="${g.id}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
   <div class="row">${g.f.map(([f, l]) => `<input id="s-${g.id}-${f}" placeholder="${l}" ${FELDTYP[f] || ''}>`).join('')}
