@@ -7,7 +7,8 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Bis zu zwei Schichten pro Tag, mehrere gleichzeitig offen
 - Schlüssel werden beim Gehen des Gastes wieder frei und können neu vergeben werden (belegte sind gesperrt)
 - Kunden je Schicht, Leistungen/Waren buchen, Massagen dem Masseur zuordnen
-- Mehrere Teilzahlungen (Bar/Karte/Sonstiges), Trinkgeld mit Empfänger
+- Mehrere Teilzahlungen (Bar/Karte/Sonstiges); Trinkgeld standardmäßig anteilig nach Massage-Anteil an die Masseure, Rest an die Kasse (oder fester Empfänger)
+- Getrennte Abrechnung je Masseur (Massagen + Trinkgeld-Anteil, mit Unterschriftszeile)
 - Abrechnung je Schicht oder Tag zum Drucken (Zahlungsarten, Umsatz, Masseure, Trinkgeld, offene Beträge)
 
 Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelmäßig herunterladen.
