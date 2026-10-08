@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sauna-Kasse</title>
+<style>
+/* Warum eine einzige Datei: läuft offline auf Tablet/PC, kein Server, keine Installation.
+   Warum Beträge in Cent: Gleitkomma-Summen würden bei Abrechnungen um Cent-Bruchteile abweichen. */
+:root{--bg:#f4f1ec;--card:#fff;--ink:#222;--mut:#777;--acc:#8a4b1f;--ok:#2f7d4f;--warn:#b3361f;--line:#ddd5ca}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--acc);color:#fff;padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0 16px 0 0}
+header button{background:transparent;color:#fff;border:1px solid #ffffff80;padding:8px 14px;border-radius:6px;font-size:15px}
+header button.on{background:#fff;color:var(--acc)}
+main{max-width:1000px;margin:0 auto;padding:12px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}
+h2{font-size:17px;margin:0 0 8px}h3{font-size:15px;margin:12px 0 4px}
+button,select,input{font:inherit;padding:8px;border-radius:6px;border:1px solid var(--line);background:#fff}
+button{cursor:pointer}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+button.x{color:var(--warn);padding:2px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.tabs button.on{background:var(--acc);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.grid button{text-align:left;padding:10px}
+.grid small{display:block;color:var(--mut)}
+.grid button.mass{border-left:4px solid var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+.mut{color:var(--mut)}.warn{color:var(--warn);font-weight:600}.good{color:var(--ok);font-weight:600}
+.chip{padding:6px 10px;border-radius:16px}
+.chip.on{background:var(--acc);color:#fff}
+.sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
+.noprint{}
+.printonly{display:none}
+@media print{
+  header,.noprint{display:none!important}
+  body{background:#fff}.card{border:none;padding:0;break-inside:avoid}
+  .printonly{display:block}main{max-width:none;padding:0}
+}
+</style>
+</head>
+<body>
+<header class="noprint">
+  <h1>Sauna-Kasse</h1>
+  <span id="nav"></span>
+</header>
+<main id="app"></main>
+
+<script>
+'use strict';
+const KEY = 'saunakasse-v1';
+let S = laden();
+// UI-Zustand, wird nicht gespeichert
+const U = { tab: 'kasse', sch: null, gast: null, mas: '', abr: null };
+
+function laden() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return s; } catch (e) {}
+  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [] };
+}
+function speichern() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { alert('Speichern im Browser nicht möglich – bitte „Sicherung“ herunterladen!'); }
+}
+const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const eur = c => (c / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+function cent(txt) {
+  const n = parseFloat(String(txt).replace(/\./g, '').replace(',', '.'));
+  return isFinite(n) ? Math.round(n * 100) : 0;
+}
+const heute = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const datumDe = d => d.split('-').reverse().join('.');
+const uhr = () => new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const $ = i => document.getElementById(i);
+const aktive = k => S[k].filter(x => !x.weg);
+const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).name;
+const $v = i => ($(i) || {}).value || '';
+
+const offeneSchichten = () => S.sch.filter(s => !s.zu);
+const schicht = () => S.sch.find(s => s.id === U.sch && !s.zu) || offeneSchichten()[0] || null;
+function gastSumme(s, k) {
+  const soll = s.buch.filter(b => b.gast === k).reduce((a, b) => a + b.preis * b.menge, 0);
+  const bez = s.zahl.filter(z => z.gast === k).reduce((a, z) => a + z.betrag, 0);
+  const tip = s.zahl.filter(z => z.gast === k).reduce((a, z) => a + z.tip, 0);
+  return { soll, bez, tip, offen: soll - bez };
+}
+
+/* ---------- Anzeige ---------- */
+function render() {
+  $('nav').innerHTML = [['kasse', 'Kasse'], ['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
+    .map(([t, l]) => `<button class="${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
+  $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
+}
+
+function vKasse() {
+  const off = offeneSchichten();
+  const s = schicht();
+  let h = '';
+  if (off.length) {
+    U.sch = s.id;
+    h += `<div class="row tabs">` + off.map(x =>
+      `<button class="${x.id === s.id ? 'on' : ''}" data-act="schicht" data-v="${x.id}">${datumDe(x.datum)} · Schicht ${x.nr}</button>`).join('') + `</div>`;
+    h += vSchicht(s);
+  }
+  h += vOeffnen(off.length > 0);
+  return h;
+}
+
+function vOeffnen(eingeklappt) {
+  if (!aktive('ma').length) return `<div class="card warn">Bitte zuerst unter „Stammdaten“ mindestens einen Mitarbeiter anlegen.</div>`;
+  const d = heute();
+  return `<details class="card noprint" ${eingeklappt ? '' : 'open'}><summary><b>Neue Schicht öffnen</b></summary>
+  <div class="row">
+    <input type="date" id="o-datum" value="${d}">
+    <select id="o-nr"><option value="1">Schicht 1</option><option value="2">Schicht 2</option></select>
+    <select id="o-ma">${aktive('ma').map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
+  </div>
+  <div class="row"><span class="mut">Masseure in dieser Schicht:</span>
+    ${aktive('mas').map(m => `<label><input type="checkbox" name="o-mas" value="${m.id}"> ${esc(m.name)}</label>`).join('') || '<span class="mut">(keine angelegt)</span>'}
+  </div>
+  <button class="p" data-act="oeffnen">Schicht öffnen</button></details>`;
+}
+
+function vSchicht(s) {
+  const gaeste = s.gaeste;
+  const g = gaeste.includes(U.gast) ? U.gast : (gaeste[0] || null);
+  U.gast = g;
+  let h = `<div class="card"><div class="row"><b>${datumDe(s.datum)} · Schicht ${s.nr}</b>
+    <span class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</span>
+    <span style="flex:1"></span><button data-act="schliessen">Schicht schließen</button></div>
+    <div class="row">${gaeste.map(k => {
+      const t = gastSumme(s, k);
+      return `<button class="chip ${k === g ? 'on' : ''}" data-act="gast" data-v="${k}">🔑 ${esc(kundeText(k))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`;
+    }).join('')}</div>
+    <div class="row"><input id="g-nr" list="kl" placeholder="Schlüsselnummer" size="12">
+    <datalist id="kl">${aktive('kun').map(k => `<option value="${esc(k.nummer)}">${esc(k.name || '')}</option>`).join('')}</datalist>
+    <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></div>`;
+  if (g) h += vGast(s, g);
+  const tot = s.gaeste.reduce((a, k) => { const t = gastSumme(s, k); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
+  h += `<div class="card sum"><span>Schicht gesamt: ${eur(tot.soll)}</span><span>bezahlt: ${eur(tot.bez)}</span><span>Trinkgeld: ${eur(tot.tip)}</span></div>`;
+  return h;
+}
+
+function kundeText(k) { const c = S.kun.find(x => x.id === k); return c ? c.nummer + (c.name ? ' · ' + c.name : '') : '?'; }
+
+function vGast(s, k) {
+  const t = gastSumme(s, k);
+  const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
+  if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
+  const letzterMas = [...buch].reverse().find(b => b.masseur);
+  const tipStd = letzterMas ? 'm:' + letzterMas.masseur : 'p:' + s.ma;
+  const empf = [...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)]), ['p:' + s.ma, 'Mitarbeiter ' + name('ma', s.ma)], ['', 'Gemeinsam / niemand']];
+  return `<div class="card"><h2>🔑 ${esc(kundeText(k))}</h2>
+  <div class="row"><span class="mut">Masseur für Massagen:</span>
+    <select id="m-sel" data-act="masWahl">${s.mas.map(m => `<option value="${m}" ${m === U.mas ? 'selected' : ''}>${esc(name('mas', m))}</option>`).join('') || '<option value="">(keiner in Schicht)</option>'}</select></div>
+  <h3>Leistungen</h3><div class="grid">${aktive('lei').map(l =>
+    `<button class="${l.massage ? 'mass' : ''}" data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}${l.massage ? ' · Massage' : ''}</small></button>`).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div>
+  <h3>Waren</h3><div class="grid">${aktive('war').map(l =>
+    `<button data-act="buche" data-k="war" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div>
+  <h3>Gebucht</h3>
+  <table>${buch.map(b => `<tr><td>${b.menge}× ${esc(b.name)}${b.masseur ? ` <span class="mut">(${esc(name('mas', b.masseur))})</span>` : ''}<span class="mut"> ${b.zeit}</span></td>
+    <td class="r">${eur(b.preis * b.menge)}</td><td class="r"><button class="x" data-act="buchWeg" data-v="${b.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
+  <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
+  <h3>Zahlungen</h3>
+  <table>${zahl.map(z => `<tr><td>${esc(z.art)} <span class="mut">${z.zeit}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${esc(empfName(z.tipAn))}` : ''}</td>
+    <td class="r">${eur(z.betrag)}</td><td class="r"><button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
+  <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
+  <div class="row"><input id="p-betrag" size="8" inputmode="decimal" placeholder="Betrag €" value="${t.offen > 0 ? (t.offen / 100).toFixed(2).replace('.', ',') : ''}">
+    <input id="p-tip" size="8" inputmode="decimal" placeholder="Trinkgeld €">
+    <select id="p-art"><option>Bar</option><option>Karte</option><option>Sonstiges</option></select>
+    <select id="p-tipan">${empf.map(([v, l]) => `<option value="${v}" ${v === tipStd ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+    <button class="ok" data-act="zahle">Zahlung buchen</button></div>
+  <div class="mut">Mehrere Teilzahlungen sind möglich; Trinkgeld geht an den gewählten Empfänger.</div></div>`;
+}
+function empfName(v) { if (!v) return 'gemeinsam'; const [t, i] = v.split(':'); return t === 'm' ? name('mas', i) : name('ma', i); }
+
+/* ---------- Abrechnung ---------- */
+function abrAuswahl() {
+  const tage = [...new Set(S.sch.map(s => s.datum))].sort().reverse();
+  const opt = [];
+  tage.forEach(d => {
+    opt.push([`tag:${d}`, `${datumDe(d)} – ganzer Tag`]);
+    S.sch.filter(s => s.datum === d).sort((a, b) => a.nr - b.nr)
+      .forEach(s => opt.push([s.id, `${datumDe(d)} – Schicht ${s.nr}${s.zu ? '' : ' (offen)'}`]));
+  });
+  return opt;
+}
+function vAbr() {
+  const opt = abrAuswahl();
+  if (!opt.length) return `<div class="card">Noch keine Schichten vorhanden.</div>`;
+  if (!opt.find(o => o[0] === U.abr)) U.abr = opt[0][0];
+  const sch = U.abr.startsWith('tag:') ? S.sch.filter(s => s.datum === U.abr.slice(4)) : S.sch.filter(s => s.id === U.abr);
+  return `<div class="row noprint"><select id="abr-sel" data-act="abrWahl">${opt.map(([v, l]) => `<option value="${v}" ${v === U.abr ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <button class="p" onclick="window.print()">🖨 Drucken</button></div>` + abrechnung(sch);
+}
+
+function abrechnung(sch) {
+  const buch = sch.flatMap(s => s.buch.map(b => ({ ...b, s }))), zahl = sch.flatMap(s => s.zahl.map(z => ({ ...z, s })));
+  const kopf = sch.map(s => `Schicht ${s.nr} (${esc(name('ma', s.ma))}${s.zu ? '' : ', noch offen'})`).join(' · ');
+  const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  // Zahlungen nach Art
+  const arten = [...new Set(zahl.map(z => z.art))];
+  let h = `<div class="card"><h2>Abrechnung ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
+  <h3>Einnahmen nach Zahlungsart</h3><table><tr><th>Art</th><th class="r">Rechnung</th><th class="r">Trinkgeld</th><th class="r">Eingenommen</th></tr>
+  ${arten.map(a => { const z = zahl.filter(x => x.art === a); const b = summe(z, x => x.betrag), t = summe(z, x => x.tip); return `<tr><td>${esc(a)}</td><td class="r">${eur(b)}</td><td class="r">${eur(t)}</td><td class="r">${eur(b + t)}</td></tr>`; }).join('')}
+  <tr><th>Gesamt</th><th class="r">${eur(summe(zahl, x => x.betrag))}</th><th class="r">${eur(summe(zahl, x => x.tip))}</th><th class="r">${eur(summe(zahl, x => x.betrag + x.tip))}</th></tr></table></div>`;
+
+  // Umsatz je Position
+  const pos = {};
+  buch.forEach(b => { const k = b.name; (pos[k] = pos[k] || { m: 0, u: 0 }); pos[k].m += b.menge; pos[k].u += b.menge * b.preis; });
+  h += `<div class="card"><h3>Umsatz je Leistung / Ware</h3><table><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>
+  ${Object.entries(pos).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('')}
+  <tr><th>Gesamt</th><th></th><th class="r">${eur(summe(buch, b => b.menge * b.preis))}</th></tr></table></div>`;
+
+  // Massagen je Masseur
+  const mb = buch.filter(b => b.masseur);
+  const mids = [...new Set(mb.map(b => b.masseur))];
+  h += `<div class="card"><h3>Massagen je Masseur</h3>` + (mids.length ? `<table><tr><th>Masseur</th><th>Massage</th><th class="r">Anzahl</th><th class="r">Umsatz</th></tr>` +
+    mids.map(m => {
+      const x = mb.filter(b => b.masseur === m), ns = [...new Set(x.map(b => b.name))];
+      return ns.map((n, i) => { const y = x.filter(b => b.name === n); return `<tr><td>${i ? '' : esc(name('mas', m))}</td><td>${esc(n)}</td><td class="r">${summe(y, b => b.menge)}</td><td class="r">${eur(summe(y, b => b.menge * b.preis))}</td></tr>`; }).join('') +
+        `<tr><td></td><th>Summe ${esc(name('mas', m))}</th><th class="r">${summe(x, b => b.menge)}</th><th class="r">${eur(summe(x, b => b.menge * b.preis))}</th></tr>`;
+    }).join('') + `</table>` : '<span class="mut">Keine Massagen.</span>') + `</div>`;
+
+  // Trinkgeld je Empfänger
+  const te = [...new Set(zahl.filter(z => z.tip).map(z => z.tipAn))];
+  h += `<div class="card"><h3>Trinkgeld je Empfänger</h3>` + (te.length ? `<table>${te.map(e => `<tr><td>${esc(empfName(e))}</td><td class="r">${eur(summe(zahl.filter(z => z.tip && z.tipAn === e), z => z.tip))}</td></tr>`).join('')}</table>` : '<span class="mut">Kein Trinkgeld.</span>') + `</div>`;
+
+  // Kunden-Detail + offene Beträge
+  h += `<div class="card"><h3>Kunden (Schlüssel)</h3><table><tr><th>Schlüssel</th><th>Schicht</th><th class="r">Gebucht</th><th class="r">Bezahlt</th><th class="r">Trinkgeld</th><th class="r">Offen</th></tr>
+  ${sch.flatMap(s => s.gaeste.map(k => { const t = gastSumme(s, k); return `<tr><td>${esc(kundeText(k))}</td><td>${s.nr}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
+  <div class="mut" style="margin-top:6px">Offene Beträge oben rot markiert – sie sind noch nicht bezahlt.</div></div>`;
+  return h;
+}
+
+/* ---------- Stammdaten ---------- */
+const STAMM = [
+  { k: 'ma', t: 'Mitarbeiter', f: [['name', 'Name']] },
+  { k: 'mas', t: 'Masseure', f: [['name', 'Name']] },
+  { k: 'lei', t: 'Dienstleistungen', f: [['name', 'Bezeichnung'], ['preis', 'Preis €'], ['massage', 'Massage', 'cb']] },
+  { k: 'war', t: 'Waren', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']] },
+  { k: 'kun', t: 'Kunden (Schlüsselnummern)', f: [['nummer', 'Schlüsselnr.'], ['name', 'Name (optional)']] }
+];
+function vStamm() {
+  return STAMM.map(g => `<div class="card"><h2>${g.t}</h2>
+  <table>${aktive(g.k).map(x => `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : esc(x.name)}${x.massage ? ' <span class="mut">(Massage)</span>' : ''}</td>
+    <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
+    <td class="r"><button data-act="aendern" data-k="${g.k}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
+  <div class="row">${g.f.map(([f, l, t]) => t === 'cb' ? `<label><input type="checkbox" id="s-${g.k}-${f}"> ${l}</label>` : `<input id="s-${g.k}-${f}" placeholder="${l}" ${f === 'preis' ? 'inputmode="decimal" size="8"' : ''}>`).join('')}
+    <button class="p" data-act="neu" data-k="${g.k}">Anlegen</button></div></div>`).join('') +
+    `<div class="card"><h2>Sicherung</h2><div class="mut">Die Daten liegen nur in diesem Browser. Regelmäßig sichern!</div>
+    <div class="row"><button data-act="export">Sicherung herunterladen</button>
+    <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div></div>`;
+}
+
+/* ---------- Aktionen ---------- */
+const A = {
+  tab: v => { U.tab = v; },
+  schicht: v => { U.sch = v; U.gast = null; },
+  gast: v => { U.gast = v; },
+  masWahl: () => { U.mas = $v('m-sel'); return false; },
+  abrWahl: () => { U.abr = $v('abr-sel'); },
+  oeffnen: () => {
+    const datum = $v('o-datum'), nr = +$v('o-nr');
+    if (!datum) return alert('Bitte ein Datum wählen.');
+    if (S.sch.some(s => s.datum === datum && s.nr === nr)) return alert(`Schicht ${nr} wurde am ${datumDe(datum)} schon geöffnet.`);
+    const mas = [...document.querySelectorAll('input[name=o-mas]:checked')].map(c => c.value);
+    const s = { id: id(), datum, nr, ma: $v('o-ma'), mas, gaeste: [], buch: [], zahl: [], zu: false };
+    S.sch.push(s); U.sch = s.id; U.gast = null;
+  },
+  schliessen: () => {
+    const s = schicht(); if (!s) return;
+    const off = s.gaeste.filter(k => gastSumme(s, k).offen > 0).length;
+    if (!confirm(off ? `${off} Kunde(n) haben noch offene Beträge. Schicht trotzdem schließen?` : 'Schicht schließen?')) return;
+    s.zu = true; U.sch = null; U.tab = 'abr'; U.abr = s.id;
+  },
+  gastNeu: () => {
+    const s = schicht(), nr = $v('g-nr').trim(); if (!s || !nr) return;
+    let k = S.kun.find(x => x.nummer === nr && !x.weg);
+    if (!k) { k = { id: id(), nummer: nr, name: '' }; S.kun.push(k); }
+    if (!s.gaeste.includes(k.id)) s.gaeste.push(k.id);
+    U.gast = k.id;
+  },
+  buche: (v, el) => {
+    const s = schicht(); if (!s || !U.gast) return;
+    const l = S[el.dataset.k].find(x => x.id === v);
+    let masseur = '';
+    if (l.massage) { masseur = U.mas; if (!masseur) return alert('Bitte einen Masseur wählen (beim Öffnen der Schicht angeben).'); }
+    s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
+  },
+  buchWeg: v => { const s = schicht(); if (confirm('Buchung löschen?')) s.buch = s.buch.filter(b => b.id !== v); },
+  zahle: () => {
+    const s = schicht(); if (!s || !U.gast) return;
+    const betrag = cent($v('p-betrag')), tip = cent($v('p-tip'));
+    if (betrag <= 0 && tip <= 0) return alert('Bitte Betrag oder Trinkgeld eingeben.');
+    s.zahl.push({ id: id(), gast: U.gast, betrag, tip, art: $v('p-art'), tipAn: tip ? $v('p-tipan') : '', zeit: uhr() });
+  },
+  zahlWeg: v => { const s = schicht(); if (confirm('Zahlung löschen?')) s.zahl = s.zahl.filter(z => z.id !== v); },
+  neu: (_, el) => {
+    const v = el.dataset.k, g = STAMM.find(x => x.k === v), o = { id: id() };
+    for (const [f, , t] of g.f) {
+      const e = $(`s-${v}-${f}`);
+      o[f] = t === 'cb' ? e.checked : f === 'preis' ? cent(e.value) : e.value.trim();
+    }
+    if (!(o.name || o.nummer)) return alert('Bitte einen Namen bzw. eine Nummer eingeben.');
+    if (v === 'kun' && S.kun.some(k => k.nummer === o.nummer && !k.weg)) return alert('Diese Schlüsselnummer gibt es schon.');
+    S[v].push(o);
+  },
+  // Warum nur ausblenden statt löschen: alte Abrechnungen verweisen auf die Person/Position.
+  weg: (v, el) => { if (confirm('Eintrag entfernen? Alte Abrechnungen bleiben erhalten.')) S[el.dataset.k].find(x => x.id === v).weg = true; },
+  aendern: (v, el) => {
+    const g = STAMM.find(x => x.k === el.dataset.k), o = S[g.k].find(x => x.id === v);
+    for (const [f, l, t] of g.f) {
+      if (t === 'cb') continue;
+      const cur = f === 'preis' ? (o.preis / 100).toFixed(2).replace('.', ',') : o[f];
+      const n = prompt(l, cur); if (n === null) return;
+      o[f] = f === 'preis' ? cent(n) : n.trim();
+    }
+  },
+  export: () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
+    a.download = `sauna-kasse-${heute()}.json`; a.click(); return false;
+  }
+};
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || el.tagName === 'SELECT') return;
+  if (A[el.dataset.act](el.dataset.v, el) === false) return;
+  speichern(); render();
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'imp' && el.files[0]) {
+    el.files[0].text().then(t => {
+      try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; S = n; speichern(); render(); }
+      catch (x) { alert('Das ist keine gültige Sicherung.'); }
+    });
+  } else if (el.tagName === 'SELECT' && el.dataset.act) { A[el.dataset.act](); render(); }
+});
+render();
+</script>
+</body>
+</html>
