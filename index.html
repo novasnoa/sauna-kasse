@@ -61,7 +61,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges' };
+const U = { tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -263,14 +263,48 @@ function vAbr() {
 }
 
 // Getrennte Abrechnung je Masseur: seine Massagen, sein Trinkgeld-Anteil, Summe zum Auszahlen.
+// Mail über mailto: – öffnet das Mailprogramm des Geräts mit fertigem Text; ein Anhang ist so nicht
+// möglich, deshalb steht die Abrechnung im Text. Kein Server nötig, es verlässt nichts das Gerät.
+function mailLink(an, betreff, text) {
+  return `mailto:${encodeURIComponent(an)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
+}
+function mailKnopf(namen, adressen, betreff, text) {
+  const ad = [...new Set(adressen.filter(Boolean))];
+  if (!ad.length) return `<span class="mut noprint">✉ Keine E-Mail-Adresse hinterlegt (Stammdaten → ${namen}).</span>`;
+  return `<a class="noprint" href="${mailLink(ad.join(','), betreff, text)}"><button class="p" type="button">✉ Per E-Mail senden an ${ad.length > 1 ? ad.length + ' Empfänger' : esc(ad[0])}</button></a>`;
+}
+function masseurDaten(sch, mid) {
+  const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  const bu = sch.flatMap(s => s.buch.filter(b => b.masseur === mid).map(b => ({ ...b, s })));
+  const tr = sch.flatMap(s => s.zahl.flatMap(z => tipVerteilung(s, z).filter(x => x.an === 'm:' + mid).map(x => ({ s, z, betrag: x.betrag }))));
+  return { bu, tr, um: summe(bu, b => b.menge * b.preis), ti: summe(tr, t => t.betrag) };
+}
+function masseurText(sch, mid) {
+  const d = masseurDaten(sch, mid), nm = name('mas', mid);
+  const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
+  return `Abrechnung ${nm} – ${datumDe(sch[0].datum)}\n\nMassagen:\n` +
+    (d.bu.map(b => `  Schicht ${b.s.nr}, ${b.zeit}, Schlüssel ${gastText(b.s, b.gast)}: ${b.name} ${eur(b.menge * b.preis)}`).join('\n') || '  keine') +
+    `\nUmsatz Massagen: ${eur(d.um)}\n\nTrinkgeld (anteilig):\n` +
+    (d.tr.map(t => `  Schicht ${t.s.nr}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
+    `\nTrinkgeld gesamt: ${eur(d.ti)}\n`;
+}
+function gesamtText(sch) {
+  const zahl = sch.flatMap(s => s.zahl.map(z => ({ ...z, s }))), buch = sch.flatMap(s => s.buch);
+  const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  const tv = zahl.flatMap(z => tipVerteilung(z.s, z));
+  return `Abrechnung ${datumDe(sch[0].datum)} (${sch.map(s => 'Schicht ' + s.nr).join(', ')})\n\nEinnahmen nach Zahlungsart:\n` +
+    [...new Set(zahl.map(z => z.art))].map(a => { const z = zahl.filter(x => x.art === a); return `  ${a}: ${eur(sum(z, x => x.betrag))} + Trinkgeld ${eur(sum(z, x => x.tip))}`; }).join('\n') +
+    `\nGesamt: ${eur(sum(zahl, x => x.betrag))} + Trinkgeld ${eur(sum(zahl, x => x.tip))}\nUmsatz gebucht: ${eur(sum(buch, b => b.menge * b.preis))}\n\nTrinkgeld je Empfänger:\n` +
+    ([...new Set(tv.map(x => x.an))].map(e => `  ${empfName(e)}: ${eur(sum(tv.filter(x => x.an === e), x => x.betrag))}`).join('\n') || '  keins') + '\n';
+}
 function masseurAbrechnung(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
-  const bu = sch.flatMap(s => s.buch.filter(b => b.masseur === mid).map(b => ({ ...b, s })));
-  const tr = sch.flatMap(s => s.zahl.flatMap(z => tipVerteilung(s, z).filter(x => x.an === 'm:' + mid).map(x => ({ s, z, betrag: x.betrag }))));
-  const um = summe(bu, b => b.menge * b.preis), ti = summe(tr, t => t.betrag);
+  const { bu, tr, um, ti } = masseurDaten(sch, mid);
+  const m = S.mas.find(x => x.id === mid) || {};
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
-  <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}</div>
+  <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}</div>
+  <div class="row">${mailKnopf('Masseur*innen', [m.email], 'Abrechnung ' + name('mas', mid) + ' ' + datumDe(sch[0].datum), masseurText(sch, mid))}</div>
   <h3>Massagen</h3>` + (bu.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Massage</th><th class="r">Preis</th></tr>
   ${bu.map(b => `<tr><td>${b.s.nr}</td><td>${b.zeit}</td><td>${esc(gastText(b.s, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
   <tr><th colspan="4">${summe(bu, b => b.menge)} Massage(n), Umsatz</th><th class="r">${eur(um)}</th></tr></table>` : '<span class="mut">Keine Massagen.</span>') + `
@@ -287,7 +321,9 @@ function abrechnung(sch) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   // Zahlungen nach Art
   const arten = [...new Set(zahl.map(z => z.art))];
+  const mas_ = [...new Set(sch.map(s => s.ma))].map(i => S.ma.find(x => x.id === i) || {});
   let h = `<div class="card"><h2>Abrechnung ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
+  <div class="row">${mailKnopf('Mitarbeiter*innen', mas_.map(m => m.email), 'Abrechnung ' + datumDe(sch[0].datum), gesamtText(sch))}</div>
   <h3>Einnahmen nach Zahlungsart</h3><table><tr><th>Art</th><th class="r">Rechnung</th><th class="r">Trinkgeld</th><th class="r">Eingenommen</th></tr>
   ${arten.map(a => { const z = zahl.filter(x => x.art === a); const b = summe(z, x => x.betrag), t = summe(z, x => x.tip); return `<tr><td>${esc(a)}</td><td class="r">${eur(b)}</td><td class="r">${eur(t)}</td><td class="r">${eur(b + t)}</td></tr>`; }).join('')}
   <tr><th>Gesamt</th><th class="r">${eur(summe(zahl, x => x.betrag))}</th><th class="r">${eur(summe(zahl, x => x.tip))}</th><th class="r">${eur(summe(zahl, x => x.betrag + x.tip))}</th></tr></table></div>`;
@@ -321,28 +357,39 @@ function abrechnung(sch) {
 }
 
 /* ---------- Stammdaten ---------- */
+// Services und Massagen liegen beide in S.lei (eine Liste, Flag „massage“), damit Buchungen und
+// Abrechnung unverändert bleiben – nur die Reiter zeigen sie getrennt.
+const KONTAKT = [['name', 'Name'], ['email', 'E-Mail'], ['tel', 'Telefon']];
 const STAMM = [
-  { k: 'ma', t: 'Mitarbeiter', f: [['name', 'Name']] },
-  { k: 'mas', t: 'Masseure', f: [['name', 'Name']] },
-  { k: 'lei', t: 'Dienstleistungen', f: [['name', 'Bezeichnung'], ['preis', 'Preis €'], ['massage', 'Massage', 'cb']] },
-  { k: 'war', t: 'Waren', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']] },
-  { k: 'kun', t: 'Kunden (Schlüsselnummern)', f: [['nummer', 'Schlüsselnr.'], ['name', 'Name (optional)']] }
+  { id: 'ma', k: 'ma', t: 'Mitarbeiter*innen', f: KONTAKT },
+  { id: 'mas', k: 'mas', t: 'Masseur*innen', f: KONTAKT },
+  { id: 'srv', k: 'lei', t: 'Services', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']], filter: x => !x.massage, set: { massage: false } },
+  { id: 'mss', k: 'lei', t: 'Massagen', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']], filter: x => !!x.massage, set: { massage: true } },
+  { id: 'war', k: 'war', t: 'Waren', f: [['name', 'Bezeichnung'], ['preis', 'Preis €']] },
+  { id: 'kun', k: 'kun', t: 'Kunden', f: [['nummer', 'Schlüsselnr.'], ['name', 'Bezeichnung (optional)']] }
 ];
+const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', preis: 'inputmode="decimal" size="8"' };
 function vStamm() {
-  return STAMM.map(g => `<div class="card"><h2>${g.t}</h2>
-  <table>${aktive(g.k).map(x => `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : esc(x.name)}${x.massage ? ' <span class="mut">(Massage)</span>' : ''}</td>
-    <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
-    <td class="r"><button data-act="aendern" data-k="${g.k}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
-  <div class="row">${g.f.map(([f, l, t]) => t === 'cb' ? `<label><input type="checkbox" id="s-${g.k}-${f}"> ${l}</label>` : `<input id="s-${g.k}-${f}" placeholder="${l}" ${f === 'preis' ? 'inputmode="decimal" size="8"' : ''}>`).join('')}
-    <button class="p" data-act="neu" data-k="${g.k}">Anlegen</button></div></div>`).join('') +
-    `<div class="card"><h2>Sicherung</h2><div class="mut">Die Daten liegen nur in diesem Browser. Regelmäßig sichern!</div>
+  const g = STAMM.find(x => x.id === U.st) || STAMM[0];
+  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
+    <button style="margin-left:auto" class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung</button></div>`;
+  if (U.st === 'sich') return tabs + `<div class="card"><h2>Sicherung</h2><div class="mut">Die Daten liegen nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
     <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div></div>`;
+  const liste = aktive(g.k).filter(g.filter || (() => true));
+  return tabs + `<div class="card"><h2>${g.t}</h2>
+  <table>${liste.map(x => `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : esc(x.name)}
+      ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}</td>
+    <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
+    <td class="r"><button data-act="aendern" data-g="${g.id}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
+  <div class="row">${g.f.map(([f, l]) => `<input id="s-${g.id}-${f}" placeholder="${l}" ${FELDTYP[f] || ''}>`).join('')}
+    <button class="p" data-act="neu" data-g="${g.id}">Anlegen</button></div></div>`;
 }
 
 /* ---------- Aktionen ---------- */
 const A = {
   tab: v => { U.tab = v; },
+  stab: v => { U.st = v; },
   schicht: v => { U.sch = v; U.gast = null; },
   gast: v => { U.gast = v; },
   masWahl: () => { U.mas = $v('m-sel'); return false; },
@@ -399,25 +446,22 @@ const A = {
   },
   zahlWeg: v => { const s = schicht(); if (confirm('Zahlung löschen?')) s.zahl = s.zahl.filter(z => z.id !== v); },
   neu: (_, el) => {
-    const v = el.dataset.k, g = STAMM.find(x => x.k === v), o = { id: id() };
-    for (const [f, , t] of g.f) {
-      const e = $(`s-${v}-${f}`);
-      o[f] = t === 'cb' ? e.checked : f === 'preis' ? cent(e.value) : e.value.trim();
-    }
+    const g = STAMM.find(x => x.id === el.dataset.g), o = { id: id(), ...(g.set || {}) };
+    for (const [f] of g.f) { const e = $(`s-${g.id}-${f}`); o[f] = f === 'preis' ? cent(e.value) : e.value.trim(); }
     if (!(o.name || o.nummer)) return alert('Bitte einen Namen bzw. eine Nummer eingeben.');
-    if (v === 'kun' && S.kun.some(k => k.nummer === o.nummer && !k.weg)) return alert('Diese Schlüsselnummer gibt es schon.');
-    S[v].push(o);
+    if (g.k === 'kun' && S.kun.some(k => k.nummer === o.nummer && !k.weg)) return alert('Diese Schlüsselnummer gibt es schon.');
+    S[g.k].push(o);
   },
   // Warum nur ausblenden statt löschen: alte Abrechnungen verweisen auf die Person/Position.
   weg: (v, el) => { if (confirm('Eintrag entfernen? Alte Abrechnungen bleiben erhalten.')) S[el.dataset.k].find(x => x.id === v).weg = true; },
   aendern: (v, el) => {
-    const g = STAMM.find(x => x.k === el.dataset.k), o = S[g.k].find(x => x.id === v);
-    for (const [f, l, t] of g.f) {
-      if (t === 'cb') continue;
-      const cur = f === 'preis' ? (o.preis / 100).toFixed(2).replace('.', ',') : o[f];
+    const g = STAMM.find(x => x.id === el.dataset.g), o = S[g.k].find(x => x.id === v), neu = {};
+    for (const [f, l] of g.f) {
+      const cur = f === 'preis' ? (o.preis / 100).toFixed(2).replace('.', ',') : (o[f] || '');
       const n = prompt(l, cur); if (n === null) return;
-      o[f] = f === 'preis' ? cent(n) : n.trim();
+      neu[f] = f === 'preis' ? cent(n) : n.trim();
     }
+    Object.assign(o, neu);
   },
   export: () => {
     const a = document.createElement('a');
