@@ -183,7 +183,8 @@ function vSchicht(s) {
   return h;
 }
 
-function kundeText(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.name ? ' · ' + g.name : ''); }
+// Mit Ankunftszeit, weil dieselbe Schlüsselnummer im Lauf des Abends mehrfach vergeben wird.
+function kundeText(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.an ? ' (' + g.an + ')' : '') + (g.name ? ' · ' + g.name : ''); }
 
 function vGast(s, k) {
   const go = s.gaeste.find(x => x.id === k);
