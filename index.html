@@ -34,6 +34,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .mut{color:var(--mut)}.warn{color:var(--warn);font-weight:600}.good{color:var(--ok);font-weight:600}
 .chip{padding:6px 10px;border-radius:16px}
 .chip.on{background:var(--acc);color:#fff}
+.chip.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
+.nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
 .sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
 .noprint{}
 .printonly{display:none}
@@ -57,6 +59,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 const KEY = 'saunakasse-v1';
 let S = laden();
 // UI-Zustand, wird nicht gespeichert
+// Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
+const LIMIT_MS = 4 * 3600 * 1000;
 const U = { tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges' };
 
 function laden() {
@@ -128,7 +132,20 @@ function render() {
   $('nav').innerHTML = [['kasse', 'Kasse'], ['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
     .map(([t, l]) => `<button class="${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
   $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
+  markiere();
 }
+
+// Rot färben ohne neu zu zeichnen, damit angefangene Eingaben nicht verloren gehen.
+function markiere() {
+  const jetzt = Date.now();
+  document.querySelectorAll('.chip[data-ts]').forEach(c => c.classList.toggle('rot', jetzt - c.dataset.ts >= LIMIT_MS));
+  document.querySelectorAll('.nachzahlung[data-ts]').forEach(d => {
+    const ms = jetzt - d.dataset.ts, min = Math.floor(ms / 60000);
+    d.hidden = ms < LIMIT_MS;
+    d.textContent = `⏰ Seit ${Math.floor(min / 60)} Std. ${min % 60} Min. im Haus – der Eintritt gilt nur 4 Stunden. Nachzahlung fällig!`;
+  });
+}
+setInterval(markiere, 30000);
 
 function vKasse() {
   const off = offeneSchichten();
@@ -164,7 +181,7 @@ function vSchicht(s) {
   const g = (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
   U.gast = g;
   const chip = x => { const t = gastSumme(s, x.id);
-    return `<button class="chip ${x.id === g ? 'on' : ''}" data-act="gast" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+    return `<button class="chip ${x.id === g ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gast" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   const frei = aktive('kun').filter(k => !belegt(k.id));
   let h = `<div class="card"><div class="row"><b>${datumDe(s.datum)} · Schicht ${s.nr}</b>
     <span class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</span>
@@ -194,6 +211,7 @@ function vGast(s, k) {
   const tipStd = 'auto';
   const empf = [['auto', 'Anteilig (Masseur nach Massage-Anteil, Rest Kasse)'], ...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)]), ['p:' + s.ma, 'Mitarbeiter ' + name('ma', s.ma)], ['', 'Gemeinsam / niemand']];
   return `<div class="card"><h2>🔑 ${esc(kundeText(go))}</h2>
+  ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
   <div class="row">${go.da ? `<button data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="mut">Gegangen ${go.ab}</span> <button data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   <div class="row"><span class="mut">Masseur für Massagen:</span>
     <select id="m-sel" data-act="masWahl">${s.mas.map(m => `<option value="${m}" ${m === U.mas ? 'selected' : ''}>${esc(name('mas', m))}</option>`).join('') || '<option value="">(keiner in Schicht)</option>'}</select></div>
@@ -352,7 +370,7 @@ const A = {
       const b = belegt(k.id);
       if (b) return alert(`Schlüssel ${nr} ist noch vergeben (Schicht ${b.s.nr}). Erst bei dem Gast „Gast geht“ drücken.`);
     } else { k = { id: id(), nummer: nr, name: '' }; S.kun.push(k); }
-    const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ab: '' };
+    const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ts: Date.now(), ab: '' };
     s.gaeste.push(g); U.gast = g.id;
   },
   geht: v => {
