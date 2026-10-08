@@ -59,8 +59,16 @@ let S = laden();
 const U = { tab: 'kasse', sch: null, gast: null, mas: '', abr: null };
 
 function laden() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
   return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [] };
+}
+// Warum: früher war ein „Gast“ nur die Kunden-ID. Jetzt ist jeder Aufenthalt ein eigener Satz,
+// damit dieselbe Schlüsselnummer am Abend mehrfach vergeben werden kann, ohne dass sich
+// die Buchungen der Gäste vermischen. Die alte Kunden-ID wird zur Gast-ID, damit
+// bestehende Buchungen und Zahlungen weiter passen.
+function migriere(s) {
+  s.sch.forEach(x => { x.gaeste = x.gaeste.map(g => typeof g === 'string' ? { id: g, kun: g, name: '', da: !x.zu, an: '', ab: '' } : g); });
+  return s;
 }
 function speichern() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -83,6 +91,11 @@ const $v = i => ($(i) || {}).value || '';
 
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
 const schicht = () => S.sch.find(s => s.id === U.sch && !s.zu) || offeneSchichten()[0] || null;
+// Ein Schlüssel ist belegt, solange ein Gast mit dieser Nummer in irgendeiner offenen Schicht noch da ist.
+function belegt(kunId) {
+  for (const s of offeneSchichten()) { const g = s.gaeste.find(x => x.kun === kunId && x.da); if (g) return { s, g }; }
+  return null;
+}
 function gastSumme(s, k) {
   const soll = s.buch.filter(b => b.gast === k).reduce((a, b) => a + b.preis * b.menge, 0);
   const bez = s.zahl.filter(z => z.gast === k).reduce((a, z) => a + z.betrag, 0);
@@ -127,35 +140,41 @@ function vOeffnen(eingeklappt) {
 }
 
 function vSchicht(s) {
-  const gaeste = s.gaeste;
-  const g = gaeste.includes(U.gast) ? U.gast : (gaeste[0] || null);
+  const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
+  const g = (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
   U.gast = g;
+  const chip = x => { const t = gastSumme(s, x.id);
+    return `<button class="chip ${x.id === g ? 'on' : ''}" data-act="gast" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+  const frei = aktive('kun').filter(k => !belegt(k.id));
   let h = `<div class="card"><div class="row"><b>${datumDe(s.datum)} · Schicht ${s.nr}</b>
     <span class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</span>
     <span style="flex:1"></span><button data-act="schliessen">Schicht schließen</button></div>
-    <div class="row">${gaeste.map(k => {
-      const t = gastSumme(s, k);
-      return `<button class="chip ${k === g ? 'on' : ''}" data-act="gast" data-v="${k}">🔑 ${esc(kundeText(k))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`;
-    }).join('')}</div>
+    <div class="mut">Anwesend (${da.length}):</div>
+    <div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div>
+    ${weg.length ? `<details><summary class="mut">Gegangen (${weg.length})</summary><div class="row">${weg.map(chip).join('')}</div></details>` : ''}
     <div class="row"><input id="g-nr" list="kl" placeholder="Schlüsselnummer" size="12">
-    <datalist id="kl">${aktive('kun').map(k => `<option value="${esc(k.nummer)}">${esc(k.name || '')}</option>`).join('')}</datalist>
-    <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></div>`;
+    <datalist id="kl">${frei.map(k => `<option value="${esc(k.nummer)}">${esc(k.name || '')}</option>`).join('')}</datalist>
+    <input id="g-name" placeholder="Name (optional)" size="16">
+    <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div>
+    <div class="mut">Freie Schlüssel: ${frei.map(k => esc(k.nummer)).join(', ') || '–'}</div></div>`;
   if (g) h += vGast(s, g);
-  const tot = s.gaeste.reduce((a, k) => { const t = gastSumme(s, k); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
+  const tot = s.gaeste.reduce((a, x) => { const t = gastSumme(s, x.id); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
   h += `<div class="card sum"><span>Schicht gesamt: ${eur(tot.soll)}</span><span>bezahlt: ${eur(tot.bez)}</span><span>Trinkgeld: ${eur(tot.tip)}</span></div>`;
   return h;
 }
 
-function kundeText(k) { const c = S.kun.find(x => x.id === k); return c ? c.nummer + (c.name ? ' · ' + c.name : '') : '?'; }
+function kundeText(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.name ? ' · ' + g.name : ''); }
 
 function vGast(s, k) {
+  const go = s.gaeste.find(x => x.id === k);
   const t = gastSumme(s, k);
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
   const letzterMas = [...buch].reverse().find(b => b.masseur);
   const tipStd = letzterMas ? 'm:' + letzterMas.masseur : 'p:' + s.ma;
   const empf = [...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)]), ['p:' + s.ma, 'Mitarbeiter ' + name('ma', s.ma)], ['', 'Gemeinsam / niemand']];
-  return `<div class="card"><h2>🔑 ${esc(kundeText(k))}</h2>
+  return `<div class="card"><h2>🔑 ${esc(kundeText(go))}</h2>
+  <div class="row">${go.da ? `<button data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="mut">Gegangen ${go.ab}</span> <button data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   <div class="row"><span class="mut">Masseur für Massagen:</span>
     <select id="m-sel" data-act="masWahl">${s.mas.map(m => `<option value="${m}" ${m === U.mas ? 'selected' : ''}>${esc(name('mas', m))}</option>`).join('') || '<option value="">(keiner in Schicht)</option>'}</select></div>
   <h3>Leistungen</h3><div class="grid">${aktive('lei').map(l =>
@@ -232,8 +251,8 @@ function abrechnung(sch) {
   h += `<div class="card"><h3>Trinkgeld je Empfänger</h3>` + (te.length ? `<table>${te.map(e => `<tr><td>${esc(empfName(e))}</td><td class="r">${eur(summe(zahl.filter(z => z.tip && z.tipAn === e), z => z.tip))}</td></tr>`).join('')}</table>` : '<span class="mut">Kein Trinkgeld.</span>') + `</div>`;
 
   // Kunden-Detail + offene Beträge
-  h += `<div class="card"><h3>Kunden (Schlüssel)</h3><table><tr><th>Schlüssel</th><th>Schicht</th><th class="r">Gebucht</th><th class="r">Bezahlt</th><th class="r">Trinkgeld</th><th class="r">Offen</th></tr>
-  ${sch.flatMap(s => s.gaeste.map(k => { const t = gastSumme(s, k); return `<tr><td>${esc(kundeText(k))}</td><td>${s.nr}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
+  h += `<div class="card"><h3>Kunden (Schlüssel)</h3><table><tr><th>Schlüssel</th><th>Schicht</th><th>Zeit</th><th class="r">Gebucht</th><th class="r">Bezahlt</th><th class="r">Trinkgeld</th><th class="r">Offen</th></tr>
+  ${sch.flatMap(s => s.gaeste.map(x => { const t = gastSumme(s, x.id); return `<tr><td>${esc(kundeText(x))}</td><td>${s.nr}</td><td>${x.an || ''}${x.ab ? '–' + x.ab : ''}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
   <div class="mut" style="margin-top:6px">Offene Beträge oben rot markiert – sie sind noch nicht bezahlt.</div></div>`;
   return h;
 }
@@ -275,16 +294,30 @@ const A = {
   },
   schliessen: () => {
     const s = schicht(); if (!s) return;
-    const off = s.gaeste.filter(k => gastSumme(s, k).offen > 0).length;
+    const off = s.gaeste.filter(k => gastSumme(s, k.id).offen > 0).length;
     if (!confirm(off ? `${off} Kunde(n) haben noch offene Beträge. Schicht trotzdem schließen?` : 'Schicht schließen?')) return;
+    s.gaeste.forEach(g => { if (g.da) { g.da = false; g.ab = uhr(); } });
     s.zu = true; U.sch = null; U.tab = 'abr'; U.abr = s.id;
   },
   gastNeu: () => {
     const s = schicht(), nr = $v('g-nr').trim(); if (!s || !nr) return;
     let k = S.kun.find(x => x.nummer === nr && !x.weg);
-    if (!k) { k = { id: id(), nummer: nr, name: '' }; S.kun.push(k); }
-    if (!s.gaeste.includes(k.id)) s.gaeste.push(k.id);
-    U.gast = k.id;
+    if (k) {
+      const b = belegt(k.id);
+      if (b) return alert(`Schlüssel ${nr} ist noch vergeben (Schicht ${b.s.nr}). Erst bei dem Gast „Gast geht“ drücken.`);
+    } else { k = { id: id(), nummer: nr, name: '' }; S.kun.push(k); }
+    const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ab: '' };
+    s.gaeste.push(g); U.gast = g.id;
+  },
+  geht: v => {
+    const s = schicht(), g = s.gaeste.find(x => x.id === v), o = gastSumme(s, v).offen;
+    if (o > 0 && !confirm(`Es sind noch ${eur(o)} offen. Gast trotzdem gehen lassen?`)) return;
+    g.da = false; g.ab = uhr();
+  },
+  zurueck: v => {
+    const s = schicht(), g = s.gaeste.find(x => x.id === v), b = belegt(g.kun);
+    if (b) return alert('Dieser Schlüssel ist inzwischen an jemand anderen vergeben.');
+    g.da = true; g.ab = '';
   },
   buche: (v, el) => {
     const s = schicht(); if (!s || !U.gast) return;
@@ -338,7 +371,7 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'imp' && el.files[0]) {
     el.files[0].text().then(t => {
-      try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; S = n; speichern(); render(); }
+      try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; S = migriere(n); speichern(); render(); }
       catch (x) { alert('Das ist keine gültige Sicherung.'); }
     });
   } else if (el.tagName === 'SELECT' && el.dataset.act) { A[el.dataset.act](); render(); }
