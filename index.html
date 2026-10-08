@@ -265,13 +265,20 @@ function vAbr() {
 // Getrennte Abrechnung je Masseur: seine Massagen, sein Trinkgeld-Anteil, Summe zum Auszahlen.
 // Mail über mailto: – öffnet das Mailprogramm des Geräts mit fertigem Text; ein Anhang ist so nicht
 // möglich, deshalb steht die Abrechnung im Text. Kein Server nötig, es verlässt nichts das Gerät.
-function mailLink(an, betreff, text) {
-  return `mailto:${encodeURIComponent(an)}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
-}
+// Warum kein <button> im <a>: verschachtelte Bedienelemente öffnen auf Tablets und in Firefox
+// oft das Mailprogramm nicht. Der Link ist selbst als Knopf gestaltet. Die Adresse bleibt
+// unkodiert (@ und , verstehen nicht alle Mailprogramme in kodierter Form), Zeilenumbrüche
+// als CRLF, wie mailto: es verlangt.
+const MT = {}; // Mailtexte für „Text kopieren“, nach Schlüssel
 function mailKnopf(namen, adressen, betreff, text) {
   const ad = [...new Set(adressen.filter(Boolean))];
   if (!ad.length) return `<span class="mut noprint">✉ Keine E-Mail-Adresse hinterlegt (Stammdaten → ${namen}).</span>`;
-  return `<a class="noprint" href="${mailLink(ad.join(','), betreff, text)}"><button class="p" type="button">✉ Per E-Mail senden an ${ad.length > 1 ? ad.length + ' Empfänger' : esc(ad[0])}</button></a>`;
+  const body = encodeURIComponent(text.replace(/\n/g, '\r\n')), su = encodeURIComponent(betreff), an = ad.join(',');
+  const k = id(); MT[k] = text;
+  const css = 'display:inline-block;padding:8px 12px;border-radius:6px;text-decoration:none;border:1px solid var(--acc);';
+  return `<a class="noprint" style="${css}background:var(--acc);color:#fff" href="mailto:${an}?subject=${su}&body=${body}">✉ E-Mail an ${esc(an)}</a>
+    <a class="noprint" style="${css}color:var(--acc)" target="_blank" rel="noopener" href="https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(an)}&su=${su}&body=${body}">in Gmail öffnen</a>
+    <button class="noprint" type="button" data-act="kopiere" data-v="${k}">Text kopieren</button>`;
 }
 function masseurDaten(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
@@ -390,6 +397,11 @@ function vStamm() {
 const A = {
   tab: v => { U.tab = v; },
   stab: v => { U.st = v; },
+  kopiere: v => {
+    const t = MT[v];
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Text kopiert – jetzt in eine Mail einfügen.'), () => prompt('Zum Kopieren Strg+C drücken:', t));
+    return false;
+  },
   schicht: v => { U.sch = v; U.gast = null; },
   gast: v => { U.gast = v; },
   masWahl: () => { U.mas = $v('m-sel'); return false; },
