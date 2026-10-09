@@ -1,0 +1,2 @@
+# Cache der Firebase-CLI, entsteht bei jedem lokalen Deploy
+.firebase/
