@@ -109,7 +109,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Bar', tipAn: 'auto', neu: false, pop: null, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Bar', tipAn: 'auto', neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -461,7 +461,7 @@ function vSchicht(s) {
   // Anwesende, Gegangene und „Neuer Gast“ stehen in der Gästeleiste im Kopf (gLeiste); hier bleibt nur die Auswahl der
   // freien Schlüssel, die der Knopf dort aufklappt.
   const da = s.gaeste.filter(x => x.da);
-  const g = (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
+  const g = U.gastZu ? null : (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
   U.gast = g;
   const frei = aktive('kun').filter(k => !belegt(k.id));
   // Die Kopfkarte mit Datum, Kasse, Masseuren und den Knöpfen Bearbeiten/Wechseln/Schließen ist entfallen: das liegt jetzt
@@ -702,7 +702,7 @@ function gastAufnehmen(s, k) {
   const b = belegt(k.id);
   if (b) return alert(`Schlüssel ${k.nummer} ist noch vergeben (${schName(b.s.nr)}). Erst bei dem Gast „Gast geht“ drücken.`);
   const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ts: Date.now(), ab: '' };
-  s.gaeste.push(g); U.gast = g.id; U.neu = false;
+  s.gaeste.push(g); U.gast = g.id; U.gastZu = false; U.neu = false;
 }
 const A = {
   tab: v => { U.tab = v; },
@@ -724,12 +724,12 @@ const A = {
   // Die freien Schlüssel stehen nicht mehr dauerhaft auf der Startseite, sondern erst nach „Neuer Gast“.
   neuGast: () => { U.neu = true; },
   neuAb: () => { U.neu = false; },
-  gast: v => { U.gast = v; },
+  gast: v => { U.gast = v; U.gastZu = false; },
   // Die Leiste im Kopf: Auswahl öffnet/schließt die Liste; jede andere Aktion schließt sie (siehe Klick-Behandlung unten).
   pop: v => { U.pop = U.pop === v ? null : v; },
-  gastTop: v => { U.gast = v; U.tab = 'kasse'; U.form = null; },
+  gastTop: v => { U.gast = v; U.gastZu = false; U.tab = 'kasse'; U.form = null; },
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
-  schTop: v => { U.sch = v; U.gast = null; U.form = null; U.neu = false; U.tab = 'kasse'; },
+  schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   artWahl: v => { U.art = v; behalte(); },
   tipAnWahl: v => { U.tipAn = v; behalte(); },
@@ -751,7 +751,7 @@ const A = {
     if (S.sch.some(s => s.datum === datum && s.nr === nr)) return alert(`Die ${schName(nr)} wurde am ${datumDe(datum)} schon geöffnet.`);
     const mas = [...document.querySelectorAll('input[name=o-mas]:checked')].map(c => c.value);
     const s = { id: id(), datum, nr, ma: $v('o-ma'), mas, gaeste: [], buch: [], zahl: [], zu: false };
-    S.sch.push(s); U.sch = s.id; U.gast = null;
+    S.sch.push(s); U.sch = s.id; U.gast = null; U.gastZu = false;
   },
   wechselForm: () => { U.form = 'wechsel'; U.tab = 'kasse'; },
   bearbForm: () => { U.form = 'bearb'; U.tab = 'kasse'; },
@@ -776,7 +776,7 @@ const A = {
       alt.zahl.filter(z => z.gast === g.id).forEach(z => neu.zahl.push({ ...z, id: id(), gast: ng.id, tip: 0, tipAn: '', uebernommen: true }));
       g.da = false; g.ab = jetzt;
     });
-    alt.zu = true; S.sch.push(neu); U.sch = neu.id; U.gast = null; U.form = null;
+    alt.zu = true; S.sch.push(neu); U.sch = neu.id; U.gast = null; U.gastZu = false; U.form = null;
   },
   schliessen: () => {
     const s = schicht(); if (!s) return;
@@ -796,6 +796,9 @@ const A = {
     const s = schicht(), g = s.gaeste.find(x => x.id === v), o = gastSumme(s, v).offen;
     if (o > 0 && !confirm(`Es sind noch ${eur(o)} offen. Gast trotzdem gehen lassen?`)) return;
     g.da = false; g.ab = uhr();
+    // Ohne offenen Betrag ist beim Gast nichts mehr zu tun: seine Seite schließt sich, bis ein Gast gewählt wird.
+    // Bei offenem Betrag (trotzdem gehen lassen) bleibt sie stehen, damit man es noch sieht.
+    if (o <= 0) { U.gastZu = true; U.gast = null; }
   },
   zurueck: v => {
     const s = schicht(), g = s.gaeste.find(x => x.id === v), b = belegt(g.kun);
