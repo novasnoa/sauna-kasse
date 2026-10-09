@@ -67,6 +67,9 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
 .k4.timer{font-variant-numeric:tabular-nums;font-weight:600}
+.chip .rest{font-variant-numeric:tabular-nums;font-size:.85em;margin-left:6px;opacity:.9}
+.chip .rest.ueber{font-weight:700;opacity:1}
+.chip .umsatz{font-size:.85em;margin-left:6px;opacity:.9}
 .k4.timer.ueber{background:var(--warn);color:#fff;border-color:var(--warn)}
 .chip.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
@@ -238,7 +241,7 @@ function gLeiste() {
   const weg = off.reduce((n, x) => n + x.gaeste.filter(g => !g.da).length, 0);
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
-    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? `<span class="rest" data-ts="${x.ts}">⏱ ${uhrText(x.ts)}</span>` : '') : `<span class="umsatz">${eur(t.soll)}</span>`} ${x.da && t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   // Drei gleich große Schalter (g3), dann mit etwas Abstand der Schichten-Schalter (sch).
   let h = `<button class="g3 ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
     <button class="g3 ${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">${weg} gegangen ▾</button>
@@ -268,7 +271,7 @@ function uhrText(ts) {
   return rest > 0 ? t : '+' + t;
 }
 function uhrenAktualisieren() {
-  document.querySelectorAll('.timer[data-ts]').forEach(e => {
+  document.querySelectorAll('.timer[data-ts], .rest[data-ts]').forEach(e => {
     e.textContent = '⏱ ' + uhrText(+e.dataset.ts);
     e.classList.toggle('ueber', Date.now() - e.dataset.ts >= LIMIT_MS);
   });
@@ -535,6 +538,8 @@ function vSchicht(s) {
   return h;
 }
 
+// Für die Listen der Leiste: Nummer und Name, ohne Ankunftszeit – dort steht bei Anwesenden die Restzeit, bei Gegangenen der Umsatz.
+function schluesselName(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.name ? ' · ' + g.name : ''); }
 // Mit Ankunftszeit, weil dieselbe Schlüsselnummer im Lauf des Abends mehrfach vergeben wird.
 function kundeText(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.an ? ' (' + g.an + ')' : '') + (g.name ? ' · ' + g.name : ''); }
 
@@ -891,9 +896,18 @@ const A = {
     const l = S[el.dataset.k].find(x => x.id === v);
     let masseur = '';
     if (l.massage) { masseur = U.mas; if (!masseur) return alert('Bitte oben in der Zeile einen Masseur antippen. Ohne Masseure in der Schicht: Schicht bearbeiten.'); }
-    s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
+    // Gleicher Artikel beim selben Gast (und gleichem Masseur) erhöht die Menge, statt eine weitere Zeile anzulegen.
+    // Aus der Vorschicht Übernommenes bleibt unberührt, es ist dort schon abgerechnet.
+    const da = s.buch.find(b => b.gast === U.gast && !b.uebernommen && b.name === l.name && b.preis === l.preis && (b.masseur || '') === masseur);
+    if (da) da.menge += 1;
+    else s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
   },
-  buchWeg: v => { const s = schicht(); if (confirm('Buchung löschen?')) s.buch = s.buch.filter(b => b.id !== v); },
+  // Bei Menge > 1 nimmt ✕ eine Einheit weg, sonst die Zeile.
+  buchWeg: v => {
+    const s = schicht(), b = s.buch.find(x => x.id === v); if (!b) return;
+    if (!confirm(b.menge > 1 ? `Eine Einheit „${b.name}“ entfernen?` : 'Buchung löschen?')) return;
+    if (b.menge > 1) b.menge -= 1; else s.buch = s.buch.filter(x => x.id !== v);
+  },
   zahle: () => {
     const s = schicht(); if (!s || !U.gast) return;
     const betrag = cent($v('p-betrag')), tip = cent($v('p-tip'));
