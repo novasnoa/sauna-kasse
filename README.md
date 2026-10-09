@@ -8,7 +8,7 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Schlüssel werden beim Gehen des Gastes wieder frei und können neu vergeben werden (belegte sind gesperrt)
 - Tablet/Touch: große Bedienflächen, freie Schlüssel per Antippen, Zahlart/Trinkgeld per Tippen, zweispaltig im Querformat
 - Kunden je Schicht, Leistungen/Waren buchen, Massagen dem Masseur zuordnen
-- Mehrere Teilzahlungen (Bar/Karte/Sonstiges); Trinkgeld immer anteilig nach Massage-Anteil an die Masseure, Rest an die Kasse; dazu „Extra Trinkgeld“ (freie Summe an Mitarbeiter, einen Masseur oder gemeinsam)
+- Mehrere Teilzahlungen (Bar/Karte/Sonstiges); Trinkgeld immer anteilig nach Massage-Anteil an die Masseure, Rest an die Kasse; dazu „Sonstiges Trinkgeld“ (Popup: Betrag, gleichmäßig auf angewählte Mitarbeiter und Masseure verteilt)
 - Getrennte Abrechnung je Masseur (Massagen + Trinkgeld-Anteil, mit Unterschriftszeile)
 - Abrechnungen per E-Mail (mailto:) an die hinterlegten Adressen: Gesamtabrechnung an die Kasse, Masseur-Abrechnung an den Masseur
 - Abrechnung je Schicht oder Tag zum Drucken (Zahlungsarten, Umsatz, Masseure, Trinkgeld, offene Beträge)
@@ -25,8 +25,8 @@ Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint
 
 5 % / 10 % / 15 % vom Betrag der Zahlung (ist er leer: vom Gesamtbetrag des Gastes) oder freie Summe im Feld.
 
-Das Trinkgeld einer Zahlung wird immer anteilig verteilt. Wer es anders will, bucht **Extra Trinkgeld**:
-eine freie Summe an den Mitarbeiter an der Kasse, an einen Masseur der Schicht oder gemeinsam.
+Das Trinkgeld einer Zahlung wird immer anteilig verteilt. Wer es anders will, bucht **Sonstiges Trinkgeld**:
+ein Popup mit Betrag und Zahlart; die Summe geht gleichmäßig an die angewählten Mitarbeiter und Masseure (übrige Cent der Reihe nach an die ersten).
 
 ## Abgleich über Google (mehrere Geräte)
 

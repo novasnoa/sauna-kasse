@@ -81,6 +81,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
   #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
   #gl .anz{padding:10px 12px;font-size:16px;white-space:nowrap}
 }
+.modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto}
+.modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
 .noprint{}
 .printonly{display:none}
 @media print{
@@ -109,7 +111,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Karte', extra: false, extraAn: '', neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Karte', extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -163,6 +165,14 @@ function belegt(kunId) {
 // so geht kein Cent verloren.
 function tipVerteilung(s, z) {
   if (!z.tip) return [];
+  // Sonstiges Trinkgeld: gleichmäßig auf die Angewählten; übrige Cent bekommen der Reihe nach die ersten,
+  // damit die Summe stimmt und kein Cent verloren geht.
+  if (z.tipAn === 'multi') {
+    const e = z.empf || [];
+    if (!e.length) return [{ an: '', betrag: z.tip }];
+    const je = Math.floor(z.tip / e.length), rest = z.tip - je * e.length;
+    return e.map((an, i) => ({ an, betrag: je + (i < rest ? 1 : 0) }));
+  }
   if (z.tipAn !== 'auto') return [{ an: z.tipAn, betrag: z.tip }];
   const buch = s.buch.filter(b => b.gast === z.gast);
   const gesamt = buch.reduce((a, b) => a + b.preis * b.menge, 0);
@@ -300,7 +310,7 @@ function zusammenfuehren(lok, rem) {
     s.ma = m(s.ma); s.mas = (s.mas || []).map(m);
     for (const g of s.gaeste || []) g.kun = m(g.kun);
     for (const b of s.buch || []) if (b.masseur) b.masseur = m(b.masseur);
-    for (const z of s.zahl || []) { if (z.ma) z.ma = m(z.ma); z.tipAn = mt(z.tipAn); }
+    for (const z of s.zahl || []) { if (z.ma) z.ma = m(z.ma); z.tipAn = mt(z.tipAn); if (z.empf) z.empf = z.empf.map(mt); }
   }
   const tot = { ...lok.tot };
   for (const i in rem.tot) tot[i] = Math.max(tot[i] || 0, rem.tot[i]);
@@ -482,10 +492,12 @@ function vSchicht(s) {
 // Mit Ankunftszeit, weil dieselbe Schlüsselnummer im Lauf des Abends mehrfach vergeben wird.
 function kundeText(g) { const c = S.kun.find(x => x.id === g.kun); return (c ? c.nummer : '?') + (g.an ? ' (' + g.an + ')' : '') + (g.name ? ' · ' + g.name : ''); }
 
-// Normales Trinkgeld gilt immer „anteilig“ (tipVerteilung); nur das Extra Trinkgeld wählt seinen Empfänger selbst:
-// den Mitarbeiter an der Kasse, einen Masseur der Schicht oder gemeinsam (leer).
+// Normales Trinkgeld gilt immer „anteilig“ (tipVerteilung). Nur das „Sonstige Trinkgeld“ wählt seine Empfänger selbst:
+// beliebig viele Mitarbeiter und Masseure der Schicht, die Summe wird gleichmäßig auf die Angewählten verteilt.
+// Der Mitarbeiter an der Kasse steht vorn, weitere aktive Mitarbeiter dahinter.
 function extraOptionen(s) {
-  return [['p:' + s.ma, 'Mitarbeiter ' + name('ma', s.ma)], ...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)]), ['', 'Gemeinsam']];
+  const ma = [s.ma, ...aktive('ma').map(m => m.id).filter(i => i !== s.ma)];
+  return [...ma.map(m => ['p:' + m, 'Mitarbeiter ' + name('ma', m)]), ...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)])];
 }
 function vGast(s, k) {
   const go = s.gaeste.find(x => x.id === k);
@@ -493,7 +505,7 @@ function vGast(s, k) {
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
   const extra = extraOptionen(s);
-  if (!extra.some(e => e[0] === U.extraAn)) U.extraAn = extra[0][0];
+  U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   return `<div class="card"><h2>🔑 ${esc(kundeText(go))}</h2>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
   <div class="row">${go.da ? `<button data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="mut">Gegangen ${go.ab}</span> <button data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
@@ -510,7 +522,7 @@ function vGast(s, k) {
     <td class="r">${eur(b.preis * b.menge)}</td><td class="r">${b.uebernommen ? '' : `<button class="x" data-act="buchWeg" data-v="${b.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
   <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
   <h3>Zahlungen</h3>
-  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Extra Trinkgeld · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
+  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Sonstiges Trinkgeld · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
     <td class="r">${eur(z.betrag)}</td><td class="r">${z.uebernommen ? '' : `<button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
   <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
   <h3>Zahlung</h3>
@@ -523,13 +535,14 @@ function vGast(s, k) {
   <div class="mut" id="p-tip-hint">Prozent antippen oder eine freie Summe ins Feld schreiben.</div>
   <div class="row" style="margin-top:12px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle">Zahlung buchen</button></div>
   <div class="mut">Mehrere Teilzahlungen sind möglich. Das Trinkgeld wird immer anteilig nach dem Massage-Anteil verteilt.</div>
-  <div class="row" style="margin-top:12px"><button class="${U.extra ? 'p' : ''}" data-act="extraSchalter">Extra Trinkgeld ${U.extra ? '▾' : '▸'}</button></div>
-  ${U.extra ? `<div class="card" style="border:2px solid var(--acc);margin-top:0">
-    <div class="mut">Extra Trinkgeld geht an:</div>
-    <div class="seg">${extra.map(([v, l]) => `<button class="${v === U.extraAn ? 'on' : ''}" data-act="extraAn" data-v="${v}">${esc(l)}</button>`).join('')}</div>
-    <div class="row"><input id="x-betrag" size="9" inputmode="decimal" placeholder="Summe €">
+  <div class="row" style="margin-top:12px"><button data-act="extraSchalter">Sonstiges Trinkgeld</button></div>
+  ${U.extra ? `<div class="modal" role="dialog" aria-label="Sonstiges Trinkgeld"><div class="card">
+    <h2>Sonstiges Trinkgeld</h2>
+    <div class="row"><input id="x-betrag" size="9" inputmode="decimal" placeholder="Betrag €">
     <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div></div>
-    <div class="row"><button class="ok" style="min-height:56px" data-act="extraBuchen">Extra Trinkgeld buchen</button></div></div>` : ''}
+    <div class="mut">Geht gleichmäßig an die Angewählten:</div>
+    <div class="seg">${extra.map(([v, l]) => `<button class="${U.extraSel.includes(v) ? 'on' : ''}" data-act="extraWahl" data-v="${v}">${esc(l)}</button>`).join('') || '<span class="mut">Keine Mitarbeiter oder Masseure angelegt.</span>'}</div>
+    <div class="row" style="margin-top:12px"><button class="ok" style="min-height:56px;min-width:180px" data-act="extraBuchen">Buchen</button><button data-act="extraSchalter">Abbrechen</button></div></div></div>` : ''}
   </div></div></div>`;
 }
 function empfName(v) { if (!v) return 'gemeinsam'; const [t, i] = v.split(':'); return t === 'm' ? name('mas', i) : name('ma', i); }
@@ -738,15 +751,17 @@ const A = {
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   artWahl: v => { U.art = v; behalte(); },
-  extraSchalter: () => { U.extra = !U.extra; },
-  extraAn: v => { U.extraAn = v; behalte(); },
-  // Extra Trinkgeld ist eine Zahlung ohne Rechnungsbetrag: nur eine freie Summe, Empfänger fest gewählt (nicht anteilig).
+  extraSchalter: () => { U.extra = !U.extra; U.extraSel = []; },
+  extraWahl: v => { U.extraSel = U.extraSel.includes(v) ? U.extraSel.filter(x => x !== v) : [...U.extraSel, v]; behalte(); },
+  // Sonstiges Trinkgeld ist eine Zahlung ohne Rechnungsbetrag: eine freie Summe, gleichmäßig auf die Angewählten
+  // (tipAn 'multi', Empfänger in empf; die Rechnung steht in tipVerteilung).
   extraBuchen: () => {
-    const s = schicht(); if (!s || !U.gast) return;
+    const s = schicht(); if (!s || !U.gast) return false;
     const tip = cent($v('x-betrag'));
-    if (tip <= 0) return alert('Bitte eine Summe eingeben.');
-    s.zahl.push({ id: id(), ma: s.ma, gast: U.gast, betrag: 0, tip, art: U.art, tipAn: U.extraAn, extra: true, zeit: uhr() });
-    U.extra = false;
+    if (tip <= 0) { alert('Bitte einen Betrag eingeben.'); return false; }
+    if (!U.extraSel.length) { alert('Bitte mindestens einen Mitarbeiter oder Masseur anwählen.'); return false; }
+    s.zahl.push({ id: id(), ma: s.ma, gast: U.gast, betrag: 0, tip, art: U.art, tipAn: 'multi', empf: [...U.extraSel], extra: true, zeit: uhr() });
+    U.extra = false; U.extraSel = [];
   },
   // Ohne Neuzeichnen: nur das Feld füllen, damit nichts verspringt.
   // Prozent vom Betrag dieser Zahlung (bei Teilzahlung also vom Teilbetrag); ist das Feld leer, vom Gesamtbetrag des Gastes.
