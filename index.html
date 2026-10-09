@@ -69,7 +69,9 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <header class="noprint">
   <h1>Sauna-Kasse</h1>
   <span id="nav"></span>
-  <span id="netz" hidden style="margin-left:auto;background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span>
+  <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+  <button id="wolke" hidden class="noprint"></button>
+  <span id="netz" hidden style="background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span></span>
 </header>
 <main id="app"></main>
 
@@ -84,7 +86,7 @@ const U = { art: 'Bar', tipAn: 'auto', edit: null, keep: null, form: null, tab: 
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
-  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [] };
+  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [], tot: {} };
 }
 // Warum: früher war ein „Gast“ nur die Kunden-ID. Jetzt ist jeder Aufenthalt ein eigener Satz,
 // damit dieselbe Schlüsselnummer am Abend mehrfach vergeben werden kann, ohne dass sich
@@ -92,11 +94,14 @@ function laden() {
 // bestehende Buchungen und Zahlungen weiter passen.
 function migriere(s) {
   s.sch.forEach(x => { x.gaeste = x.gaeste.map(g => typeof g === 'string' ? { id: g, kun: g, name: '', da: !x.zu, an: '', ab: '' } : g); });
+  s.tot = s.tot || {};   // Löschvermerke für den Abgleich (Id → Zeitpunkt)
   return s;
 }
 function speichern() {
+  stempeln();
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { alert('Speichern im Browser nicht möglich – bitte „Sicherung“ herunterladen!'); }
+  if (G.an) gPlan();
 }
 const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -173,6 +178,182 @@ function markiere() {
   });
 }
 setInterval(markiere, 30000);
+
+/* ---------- Abgleich über Google Drive ----------
+   Warum so: Die Kasse ist eine reine Browser-Datei ohne Server. Jedes Gerät schreibt NUR seine eigene Datei
+   in den versteckten App-Ordner des Google-Kontos (drive.appdata – kein Zugriff auf andere Drive-Dateien) und
+   liest die Dateien der anderen. So gibt es nie zwei Schreiber auf einer Datei und damit keine Überschreib-Unfälle.
+   Zusammengeführt wird je Datensatz (Id): der zuletzt geänderte gewinnt, neue Sätze kommen dazu, Gelöschtes
+   steht als Vermerk in S.tot. Die Geräteuhren sollten ungefähr stimmen (automatische Zeit am iPad ist Standard). */
+const GOOGLE_CLIENT_ID = '';   // Wenn hier eingetragen, entfällt die Eingabe auf jedem Gerät.
+const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
+const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
+if (!G.dev) { G.dev = id(); lsSet('sk-dev', G.dev); }
+
+// Was an einem Satz „seine eigene“ Änderung ist (ohne die Untersätze einer Schicht und ohne Zeitstempel).
+const fp = o => JSON.stringify(Object.fromEntries(Object.entries(o).filter(([k]) => k !== '_t' && !LISTKEYS.includes(k))));
+function fingerprints() {
+  const m = {};
+  for (const c of COLL) for (const r of S[c]) { m[r.id] = fp(r); if (c === 'sch') for (const l of LISTKEYS) for (const x of r[l] || []) m[x.id] = fp(x); }
+  return m;
+}
+let BASIS = fingerprints();
+// Erkennt bei jedem Speichern, was sich seit dem letzten Mal geändert hat, und stempelt es – so muss keine
+// der vielen Stellen im Programm selbst daran denken. Verschwundene Sätze werden als gelöscht vermerkt.
+function stempeln() {
+  const jetzt = Date.now(), neu = {};
+  const geh = o => { const f = fp(o); neu[o.id] = f; if (BASIS[o.id] !== f) o._t = jetzt; };
+  for (const c of COLL) for (const r of S[c]) { geh(r); if (c === 'sch') for (const l of LISTKEYS) for (const x of r[l] || []) geh(x); }
+  S.tot = S.tot || {};
+  for (const i in BASIS) if (!(i in neu)) S.tot[i] = jetzt;
+  BASIS = neu;
+}
+function mergeList(a, b, tot) {
+  const m = new Map(a.map(x => [x.id, x]));
+  for (const y of b) { const x = m.get(y.id); m.set(y.id, x ? mergeRec(x, y, tot) : y); }
+  return [...m.values()].filter(r => !(tot[r.id] > (r._t || 0)));
+}
+function mergeRec(x, y, tot) {
+  const o = JSON.parse(JSON.stringify((y._t || 0) > (x._t || 0) ? y : x));
+  for (const k of LISTKEYS) if (x[k] || y[k]) o[k] = mergeList(x[k] || [], y[k] || [], tot);
+  return o;
+}
+// Zwei Geräte haben „Anna“ oder Schlüssel 1 oft unabhängig angelegt (verschiedene Ids): solche Stammdaten
+// werden über Name/Nummer als dieselben erkannt und die Verweise der fremden Schichten umgeschrieben.
+function zusammenfuehren(lok, rem) {
+  rem = JSON.parse(JSON.stringify(rem)); rem.tot = rem.tot || {};
+  const nk = (c, r) => c === 'kun' ? String(r.nummer).trim() : (r.name || '').trim().toLowerCase() + (c === 'lei' ? '|' + !!r.massage : '');
+  const map = {};
+  for (const c of ['ma', 'mas', 'lei', 'war', 'kun']) {
+    rem[c] = (rem[c] || []).filter(r => {
+      if (r.weg || lok[c].some(x => x.id === r.id)) return true;
+      const g = lok[c].find(x => !x.weg && nk(c, x) === nk(c, r));
+      if (g) { map[r.id] = g.id; return false; }
+      return true;
+    });
+  }
+  rem.sch = rem.sch || [];
+  for (const r of rem.sch) {   // dieselbe Schicht (Tag + Art), unabhängig auf zwei Geräten geöffnet
+    const g = lok.sch.find(x => x.datum === r.datum && x.nr === r.nr && x.id !== r.id);
+    if (g && !rem.sch.some(y => y.id === g.id)) r.id = g.id;
+  }
+  const m = i => map[i] || i, mt = t => { if (!t) return t; const [p, i] = t.split(':'); return i ? p + ':' + m(i) : t; };
+  for (const s of rem.sch) {
+    s.ma = m(s.ma); s.mas = (s.mas || []).map(m);
+    for (const g of s.gaeste || []) g.kun = m(g.kun);
+    for (const b of s.buch || []) if (b.masseur) b.masseur = m(b.masseur);
+    for (const z of s.zahl || []) { if (z.ma) z.ma = m(z.ma); z.tipAn = mt(z.tipAn); }
+  }
+  const tot = { ...lok.tot };
+  for (const i in rem.tot) tot[i] = Math.max(tot[i] || 0, rem.tot[i]);
+  const out = { v: 1 };
+  for (const c of COLL) out[c] = mergeList(lok[c], rem[c] || [], tot);
+  out.tot = tot;
+  return out;
+}
+// Gleicher Inhalt = gleicher Text, egal in welcher Reihenfolge Schlüssel/Listen stehen (sonst Endlosabgleich).
+function kanon(o) {
+  if (Array.isArray(o)) { const a = o.map(kanon); return o.length && o[0] && typeof o[0] === 'object' && 'id' in o[0] ? a.sort((x, y) => x.id < y.id ? -1 : 1) : a; }
+  if (o && typeof o === 'object') { const r = {}; for (const k of Object.keys(o).sort()) r[k] = kanon(o[k]); return r; }
+  return o;
+}
+const kj = o => JSON.stringify(kanon(o));
+
+function gLade() {
+  return new Promise((ok, no) => {
+    if (window.google && google.accounts) return ok();
+    const t = document.createElement('script'); t.src = 'https://accounts.google.com/gsi/client';
+    t.onload = ok; t.onerror = () => no(new Error('offline')); document.head.appendChild(t);
+  });
+}
+function gToken(interaktiv) {
+  if (G.tok && Date.now() < G.exp - 60000) return Promise.resolve();
+  return gLade().then(() => new Promise((ok, no) => {
+    const c = google.accounts.oauth2.initTokenClient({
+      client_id: G.cid, scope: 'https://www.googleapis.com/auth/drive.appdata',
+      callback: r => { if (r.access_token) { G.tok = r.access_token; G.exp = Date.now() + (r.expires_in || 3600) * 1000; ok(); } else no(new Error('login')); },
+      error_callback: () => no(new Error('login'))
+    });
+    c.requestAccessToken({ prompt: interaktiv ? '' : 'none' });
+  }));
+}
+async function gApi(url, opt = {}) {
+  const r = await fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + G.tok } });
+  if (r.status === 401) { G.tok = ''; throw new Error('login'); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r;
+}
+async function gUpload(json) {
+  if (G.eigen) { await gApi(`https://www.googleapis.com/upload/drive/v3/files/${G.eigen}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: json }); return; }
+  const bd = 'sk' + id(), meta = { name: 'sauna-kasse-' + G.dev + '.json', parents: ['appDataFolder'] };
+  const body = `--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${bd}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${bd}--`;
+  const r = await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body });
+  G.eigen = (await r.json()).id;
+}
+async function gSync(interaktiv) {
+  if (!G.an || !G.cid || G.busy) return;
+  if (!navigator.onLine) return gStatus('offline');
+  G.busy = true; gStatus('sync');
+  try {
+    await gToken(interaktiv);
+    stempeln();
+    const l = await (await gApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=100&fields=files(id,name,modifiedTime)&q=' + encodeURIComponent("name contains 'sauna-kasse-'"))).json();
+    const eigenName = 'sauna-kasse-' + G.dev + '.json'; let neu = false;
+    for (const f of l.files || []) {
+      if (f.name === eigenName) { G.eigen = f.id; continue; }
+      if (G.mod[f.id] === f.modifiedTime) continue;
+      const rem = await (await gApi(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).json();
+      if (rem && rem.v === 1) { const vor = kj(S); S = zusammenfuehren(S, rem); if (kj(S) !== vor) neu = true; }
+      G.mod[f.id] = f.modifiedTime;
+    }
+    BASIS = fingerprints();   // Fremdes nicht als eigene Änderung stempeln
+    if (neu) lsSet(KEY, JSON.stringify(S));
+    const k = kj(S);
+    if (k !== G.letzte) { await gUpload(JSON.stringify(S)); G.letzte = k; }
+    gStatus('ok');
+    if (neu) gNeuZeichnen();
+  } catch (e) { gStatus(e.message === 'login' ? 'anmelden' : navigator.onLine ? 'fehler' : 'offline', e.message); }
+  finally { G.busy = false; }
+}
+function gPlan() { clearTimeout(G.timer); G.timer = setTimeout(() => gSync(false), 2500); }
+// Nicht mitten in einer Eingabe neu zeichnen (am Tablet würde sonst die Tastatur verschwinden).
+function gNeuZeichnen() {
+  const a = document.activeElement;
+  if (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) { G.spaeter = true; return; }
+  behalte(); render();
+}
+addEventListener('focusout', () => { if (G.spaeter) setTimeout(() => { if (!/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) { G.spaeter = false; behalte(); render(); } }, 300); });
+function gStatus(st, fehler) {
+  G.status = st; G.fehler = fehler || ''; if (st === 'ok') G.zeit = uhr();
+  const w = $('wolke'); if (!w) return;
+  w.hidden = !G.an;
+  const t = { ok: ['☁ ✓ ' + G.zeit, 'gJetzt'], sync: ['☁ gleicht ab …', 'gJetzt'], anmelden: ['☁ Bei Google anmelden', 'gLogin'], fehler: ['☁ Fehler – antippen', 'gJetzt'], offline: ['☁ wartet auf Netz', 'gJetzt'], aus: ['', 'gJetzt'] }[st] || ['', 'gJetzt'];
+  w.textContent = t[0]; w.dataset.act = t[1];
+  w.style.cssText = st === 'anmelden' || st === 'fehler' ? 'background:#fde8e4;color:var(--warn);border-color:var(--warn)' : 'background:transparent;color:#fff;border:1px solid #ffffff80';
+  const z = $('g-status'); if (z) z.textContent = gText();
+}
+const gText = () => ({ ok: 'Verbunden – zuletzt abgeglichen um ' + G.zeit + '.', sync: 'Gleicht ab …', anmelden: 'Bitte bei Google anmelden (Knopf oben).', fehler: 'Fehler beim Abgleich: ' + G.fehler, offline: 'Kein Netz – es wird abgeglichen, sobald wieder Netz da ist.', aus: 'Ausgeschaltet.' }[G.status] || (G.an ? 'Noch nicht abgeglichen.' : 'Ausgeschaltet.'));
+function vSync() {
+  return `<div class="card"><h2>☁ Abgleich über Google</h2>
+  <div class="mut">Alle Geräte, die mit demselben Google-Konto verbunden sind, sehen dieselben Daten – auch ein neues iPad. Die Daten liegen im versteckten App-Ordner von Google Drive; andere Dateien bleiben unberührt.</div>
+  <div class="row"><b id="g-status">${esc(gText())}</b></div>
+  ${G.an ? `<div class="row"><button class="p" data-act="gJetzt">Jetzt abgleichen</button><button data-act="gAus">Abgleich ausschalten</button></div>` : `
+  ${GOOGLE_CLIENT_ID ? '' : `<div class="row"><input id="g-cid" size="50" placeholder="Google-Client-ID (…apps.googleusercontent.com)" value="${esc(G.cid)}"></div>`}
+  <div class="row"><button class="p" data-act="gAn">Abgleich einschalten und bei Google anmelden</button></div>`}
+  <details><summary class="mut" style="min-height:44px;display:flex;align-items:center">Einrichtung (einmalig)</summary>
+  <ol class="mut">
+   <li>console.cloud.google.com öffnen, neues Projekt anlegen.</li>
+   <li>„APIs &amp; Dienste“ → „Bibliothek“ → <b>Google Drive API</b> aktivieren.</li>
+   <li>„OAuth-Zustimmungsbildschirm“: extern, App-Name „Sauna-Kasse“, Ihre Mailadresse eintragen, bei „Testnutzer“ alle Google-Konten hinzufügen, die genutzt werden. Bereich <b>…/auth/drive.appdata</b> hinzufügen.</li>
+   <li>„Anmeldedaten“ → „OAuth-Client-ID erstellen“ → Typ <b>Webanwendung</b>. Bei „Autorisierte JavaScript-Quellen“ <b>${esc(location.origin)}</b> eintragen.</li>
+   <li>Die erzeugte Client-ID hier einfügen und auf jedem Gerät „einschalten“ drücken.</li></ol></details></div>`;
+}
+setInterval(() => gSync(false), 30000);
+addEventListener('online', () => gSync(false));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) gSync(false); });
+if (G.an) { gStatus('sync'); setTimeout(() => gSync(false), 800); }
 
 /* ---------- Offline ---------- */
 // Die Buchungen liegen im Browser, die Seite selbst im Zwischenspeicher des Service Workers (sw.js).
@@ -449,8 +630,8 @@ const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', 
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
   const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
-    <button style="margin-left:auto" class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung</button></div>`;
-  if (U.st === 'sich') return tabs + `<div class="card"><h2>Sicherung</h2><div class="mut">Die Daten liegen nur in diesem Browser. Regelmäßig sichern!</div>
+    <button style="margin-left:auto" class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
+  if (U.st === 'sich') return tabs + vSync() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
     <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div></div>`;
   const liste = aktive(g.k).filter(g.filter || (() => true));
@@ -475,6 +656,14 @@ function gastAufnehmen(s, k) {
 const A = {
   tab: v => { U.tab = v; },
   stab: v => { U.st = v; U.edit = null; },
+  gAn: () => {
+    const c = GOOGLE_CLIENT_ID || $v('g-cid').trim();
+    if (!c) return alert('Bitte die Google-Client-ID eintragen (Anleitung steht darunter).');
+    G.cid = c; lsSet('sk-gcid', c); G.an = true; lsSet('sk-gsync', '1'); gStatus('sync'); gSync(true);
+  },
+  gAus: () => { if (confirm('Google-Abgleich auf diesem Gerät ausschalten? Die Daten hier bleiben erhalten.')) { G.an = false; G.tok = ''; lsSet('sk-gsync', '0'); gStatus('aus'); } },
+  gJetzt: () => { gSync(false); return false; },
+  gLogin: () => { gSync(true); return false; },
   kopiere: v => {
     const t = MT[v];
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Text kopiert – jetzt in eine Mail einfügen.'), () => prompt('Zum Kopieren Strg+C drücken:', t));

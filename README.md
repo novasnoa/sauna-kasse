@@ -24,3 +24,18 @@ Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint
 ## Trinkgeld
 
 5 % / 10 % / 15 % vom Betrag der Zahlung (ist er leer: vom Gesamtbetrag des Gastes) oder freie Summe im Feld.
+
+## Abgleich über Google (mehrere Geräte)
+
+Optional, unter Stammdaten → „Sicherung & Google“. Jedes Gerät schreibt **nur seine eigene** Datei in den
+versteckten App-Ordner (`drive.appdata`) des Google-Kontos und liest die der anderen; zusammengeführt wird je
+Datensatz (zuletzt geändert gewinnt, neue Sätze kommen dazu, Gelöschtes steht in `S.tot`). Dadurch können mehrere
+Geräte gleichzeitig buchen, und ein neues iPad holt sich beim Anmelden den vollen Stand. Gleiche Stammdaten, die
+auf zwei Geräten getrennt angelegt wurden (gleicher Name / gleiche Schlüsselnummer), werden zusammengelegt.
+
+Einrichtung (einmalig, Anleitung auch in der App): Google-Cloud-Projekt, Drive API aktivieren,
+OAuth-Client-ID (Webanwendung) mit der Quelle `https://novasnoa.github.io`, Bereich `drive.appdata`.
+Die Client-ID ist kein Geheimnis; sie kann in `index.html` bei `GOOGLE_CLIENT_ID` eingetragen werden,
+dann entfällt die Eingabe auf jedem Gerät.
+
+Geprüft nur gegen eine Drive-Attrappe (siehe Commit), nicht gegen das echte Google.
