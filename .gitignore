@@ -1,2 +1,6 @@
 # Cache der Firebase-CLI, entsteht bei jedem lokalen Deploy
 .firebase/
+
+# Dienstkonto-Schlüssel gehören nur ins GitHub-Geheimnis, nie ins Repo
+sauna-kassensystem-*.json
+*-firebase-adminsdk-*.json
