@@ -25,6 +25,11 @@ Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelm
 (auf dem iPad „Zum Home-Bildschirm“ wählen). Netz zuerst, Zwischenspeicher nur als Rückfall – so ist eine neue
 Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint „Offline“, solange kein Netz da ist.
 
+## Kartenzahlung
+
+Bei Zahlart „Karte“ steht im Zahlblock der Betrag groß (Betrag + Trinkgeld), damit man ihn am Kartengerät nur abtippt.
+Das Gerät ist nicht angebunden: es läuft für sich (z. B. SumUp Solo mit eigener SIM), die Kasse bleibt ohne Internet nutzbar.
+
 ## Trinkgeld
 
 5 % / 10 % / 15 % vom Betrag der Zahlung (ist er leer: vom Gesamtbetrag des Gastes) oder freie Summe im Feld.

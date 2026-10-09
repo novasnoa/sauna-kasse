@@ -66,6 +66,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+.gross{margin:10px 0 2px;padding:8px 12px;border:2px solid var(--acc);border-radius:10px;background:#fff;text-align:center}
+.grossbetrag{font-size:46px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--acc)}
 .vermerk{margin-top:14px;padding:8px 12px;border:1px dashed var(--line);border-radius:8px;background:#fcfaf7;font-size:15px}
 .zblock{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0;background:#fcfaf7}
 .k4.timer{font-variant-numeric:tabular-nums;font-weight:600}
@@ -259,7 +261,7 @@ function render() {
   const keep = U.keep; U.keep = null;
   $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
-  markiere(); uhrenAktualisieren();
+  markiere(); uhrenAktualisieren(); kartenAnzeigen();
 }
 
 // Leiste im Kopf (auf jedem Reiter, solange eine Schicht offen ist): „N aktiv“ wählt den Gast (Liste aller Anwesenden
@@ -584,6 +586,18 @@ function extraOptionen(s) {
   const ma = [s.ma, ...aktive('ma').map(m => m.id).filter(i => i !== s.ma)];
   return [...ma.map(m => ['p:' + m, 'Mitarbeiter ' + name('ma', m)]), ...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)])];
 }
+// Bei Zahlart „Karte“ steht der Betrag groß im Zahlblock (Betrag + Trinkgeld), damit man ihn am Kartengerät nur noch abtippt.
+// Keine Verbindung zum Gerät: das läuft mit eigener SIM für sich, die Kasse bleibt ohne Internet nutzbar. Die Anzeige
+// folgt dem Tippen ohne Neuzeichnen, damit angefangene Eingaben bleiben.
+function kartenAnzeigen() {
+  ['s', 'm'].forEach(b => {
+    const e = $(`p-${b}-gross`); if (!e) return;
+    const betrag = cent($v(`p-${b}-betrag`)), tip = cent($v(`p-${b}-tip`)), summe = betrag + tip;
+    e.hidden = !(U.art === 'Karte' && summe > 0);
+    if (!e.hidden) e.innerHTML = `<div class="mut">Am Kartengerät eingeben</div><div class="grossbetrag">${eur(summe)}</div>` +
+      (tip > 0 ? `<div class="mut">Betrag ${eur(betrag)} + Trinkgeld ${eur(tip)}</div>` : '');
+  });
+}
 // Ein Zahlblock („s“ Sauna, „m“ Massage): Betrag, Zahlart (rechts daneben), Trinkgeld in Prozent oder frei, Buchen.
 function zahlBlock(b, rest, titel, hinweis) {
   const art = ['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('');
@@ -594,6 +608,7 @@ function zahlBlock(b, rest, titel, hinweis) {
   <div class="row tip"><input id="p-${b}-tip" size="9" inputmode="decimal" placeholder="Trinkgeld €">
     ${[5, 10, 15].map(c => `<button data-act="tipProz" data-b="${b}" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer" data-b="${b}">Kein</button></div>
   <div class="mut" id="p-${b}-hint">${hinweis}</div>
+  <div class="gross" id="p-${b}-gross" hidden></div>
   <div class="row" style="margin-top:8px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle${b === 's' ? 'S' : 'M'}">${b === 's' ? 'Sauna buchen' : 'Massage buchen'}</button></div></div>`;
 }
 function vGast(s, k) {
@@ -886,10 +901,11 @@ const A = {
     const basis = cent($v(`p-${b}-betrag`)) || (b === 's' ? ok.saunaGebucht : ok.massageJe(U.mas));
     $(`p-${b}-tip`).value = (Math.round(basis * v / 100) / 100).toFixed(2).replace('.', ',');
     $(`p-${b}-hint`).textContent = `${v} % von ${eur(basis)}`;
+    kartenAnzeigen();
     return false;
   },
-  tipLeer: (_, el) => { const b = el.dataset.b; $(`p-${b}-tip`).value = ''; $(`p-${b}-hint`).textContent = 'Kein Trinkgeld.'; return false; },
-  restSetzen: (v, el) => { $(`p-${el.dataset.b}-betrag`).value = (v / 100).toFixed(2).replace('.', ','); return false; },
+  tipLeer: (_, el) => { const b = el.dataset.b; $(`p-${b}-tip`).value = ''; $(`p-${b}-hint`).textContent = 'Kein Trinkgeld.'; kartenAnzeigen(); return false; },
+  restSetzen: (v, el) => { $(`p-${el.dataset.b}-betrag`).value = (v / 100).toFixed(2).replace('.', ','); kartenAnzeigen(); return false; },
   abrWahl: () => { U.abr = $v('abr-sel'); },
   abrFuer: () => { U.fuer = $v('abr-fuer'); },
   oeffnen: () => {
@@ -1035,6 +1051,7 @@ document.addEventListener('click', e => {
   if (A[el.dataset.act](el.dataset.v, el) === false) return;
   speichern(); render();
 });
+document.addEventListener('input', e => { if (/^p-[sm]-(betrag|tip)$/.test(e.target.id || '')) kartenAnzeigen(); });
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'imp' && el.files[0]) {
