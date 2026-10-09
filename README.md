@@ -4,7 +4,7 @@ Kleines Kassensystem für die Sauna – eine Datei (`index.html`), läuft offlin
 Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Eingabemaske.
 
 - Stammdaten mit Reitern: Mitarbeiter*innen, Masseur*innen (je mit E-Mail und Telefon), Services, Massagen, Waren, Kunden; Sicherung ganz rechts
-- Bis zu zwei Schichten pro Tag, mehrere gleichzeitig offen
+- Zwei Schichten pro Tag: Tagesschicht und Abendschicht (beide gleichzeitig offen möglich). Schicht bearbeiten (Kasse, Masseure ändern); Tagesschicht: „Schicht wechseln“ übernimmt alle anwesenden Gäste mit Schlüssel und Buchungen in die Abendschicht (Mitarbeiter und Masseure neu wählen)
 - Schlüssel werden beim Gehen des Gastes wieder frei und können neu vergeben werden (belegte sind gesperrt)
 - Tablet/Touch: große Bedienflächen, freie Schlüssel per Antippen, Zahlart/Trinkgeld per Tippen, zweispaltig im Querformat
 - Kunden je Schicht, Leistungen/Waren buchen, Massagen dem Masseur zuordnen

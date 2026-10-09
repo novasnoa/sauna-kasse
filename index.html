@@ -80,7 +80,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Bar', tipAn: 'auto', edit: null, keep: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Bar', tipAn: 'auto', edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -115,6 +115,8 @@ const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
 const behalte = () => { U.keep = {}; ['p-betrag', 'p-tip', 'g-nr', 'g-name'].forEach(i => { U.keep[i] = $v(i); }); };
+// Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
+const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
 const schicht = () => S.sch.find(s => s.id === U.sch && !s.zu) || offeneSchichten()[0] || null;
 // Ein Schlüssel ist belegt, solange ein Gast mit dieser Nummer in irgendeiner offenen Schicht noch da ist.
@@ -134,18 +136,20 @@ function tipVerteilung(s, z) {
   const gesamt = buch.reduce((a, b) => a + b.preis * b.menge, 0);
   const je = {};
   buch.filter(b => b.masseur).forEach(b => { je['m:' + b.masseur] = (je['m:' + b.masseur] || 0) + b.preis * b.menge; });
-  const kasse = 'p:' + s.ma, mass = Object.values(je).reduce((a, u) => a + u, 0);
+  const kasse = 'p:' + (z.ma || s.ma), mass = Object.values(je).reduce((a, u) => a + u, 0);
   if (gesamt <= 0 || mass <= 0) return [{ an: kasse, betrag: z.tip }];
   const out = Object.entries(je).sort((a, b) => b[1] - a[1]).map(([an, u]) => ({ an, betrag: Math.floor(z.tip * u / gesamt) }));
   const rest = z.tip - out.reduce((a, x) => a + x.betrag, 0);
   if (rest > 0) { if (mass < gesamt) out.push({ an: kasse, betrag: rest }); else out[0].betrag += rest; }
   return out;
 }
-function gastSumme(s, k) {
-  const soll = s.buch.filter(b => b.gast === k).reduce((a, b) => a + b.preis * b.menge, 0);
-  const bez = s.zahl.filter(z => z.gast === k).reduce((a, z) => a + z.betrag, 0);
-  const tip = s.zahl.filter(z => z.gast === k).reduce((a, z) => a + z.tip, 0);
-  return { soll, bez, tip, offen: soll - bez };
+// „neu“: ohne Übernommenes aus der vorigen Schicht – das ist dort schon abgerechnet. Offen zählt immer alles.
+function gastSumme(s, k, neu) {
+  const bu = s.buch.filter(b => b.gast === k), za = s.zahl.filter(z => z.gast === k);
+  const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  const gesamt = sum(bu, b => b.preis * b.menge) - sum(za, z => z.betrag);
+  const nb = neu ? bu.filter(b => !b.uebernommen) : bu, nz = neu ? za.filter(z => !z.uebernommen) : za;
+  return { soll: sum(nb, b => b.preis * b.menge), bez: sum(nz, z => z.betrag), tip: sum(nz, z => z.tip), offen: gesamt };
 }
 
 /* ---------- Anzeige ---------- */
@@ -185,7 +189,7 @@ function vKasse() {
   if (off.length) {
     U.sch = s.id;
     h += `<div class="row tabs">` + off.map(x =>
-      `<button class="${x.id === s.id ? 'on' : ''}" data-act="schicht" data-v="${x.id}">${datumDe(x.datum)} · Schicht ${x.nr}</button>`).join('') + `</div>`;
+      `<button class="${x.id === s.id ? 'on' : ''}" data-act="schicht" data-v="${x.id}">${datumDe(x.datum)} · ${schName(x.nr)}</button>`).join('') + `</div>`;
     h += vSchicht(s);
   }
   h += vOeffnen(off.length > 0);
@@ -198,7 +202,7 @@ function vOeffnen(eingeklappt) {
   return `<details class="card noprint" ${eingeklappt ? '' : 'open'}><summary><b>Neue Schicht öffnen</b></summary>
   <div class="row">
     <input type="date" id="o-datum" value="${d}">
-    <select id="o-nr"><option value="1">Schicht 1</option><option value="2">Schicht 2</option></select>
+    <select id="o-nr"><option value="1">Tagesschicht</option><option value="2">Abendschicht</option></select>
     <select id="o-ma">${aktive('ma').map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
   </div>
   <div class="row"><span class="mut">Masseure in dieser Schicht:</span>
@@ -207,6 +211,17 @@ function vOeffnen(eingeklappt) {
   <button class="p" data-act="oeffnen">Schicht öffnen</button></details>`;
 }
 
+// Schicht bearbeiten (Kasse/Masseure ändern) und Wechsel Tag → Abend teilen sich dieses Formular.
+function vForm(s) {
+  const wech = U.form === 'wechsel', anw = s.gaeste.filter(x => x.da).length;
+  const maListe = S.ma.filter(m => !m.weg || m.id === s.ma), masListe = S.mas.filter(m => !m.weg || s.mas.includes(m.id));
+  return `<div class="card" style="border:2px solid var(--acc)"><h2>${wech ? 'Zur Abendschicht wechseln' : 'Schicht bearbeiten – ' + schName(s.nr)}</h2>
+  ${wech ? `<div class="mut">Die ${anw} anwesenden Gäste behalten ihren Schlüssel und kommen mit ihren Buchungen in die Abendschicht. Die Tagesschicht wird geschlossen und kann abgerechnet werden.</div>` : ''}
+  <div class="row"><span class="mut">Mitarbeiter*in an der Kasse:</span>
+    <select id="w-ma">${wech ? '<option value="">– bitte wählen –</option>' : ''}${maListe.map(m => `<option value="${m.id}" ${!wech && m.id === s.ma ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
+  <div class="row"><span class="mut">Masseur*innen:</span>${masListe.map(m => `<label><input type="checkbox" name="w-mas" value="${m.id}" ${!wech && s.mas.includes(m.id) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('') || '<span class="mut">(keine angelegt)</span>'}</div>
+  <div class="row"><button class="ok" data-act="${wech ? 'wechselOk' : 'bearbOk'}">${wech ? `Wechseln und ${anw} Gäste übernehmen` : 'Speichern'}</button><button data-act="formAb">Abbrechen</button></div></div>`;
+}
 function vSchicht(s) {
   const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
   const g = (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
@@ -214,9 +229,10 @@ function vSchicht(s) {
   const chip = x => { const t = gastSumme(s, x.id);
     return `<button class="chip ${x.id === g ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gast" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   const frei = aktive('kun').filter(k => !belegt(k.id));
-  let h = `<div class="card"><div class="row"><b>${datumDe(s.datum)} · Schicht ${s.nr}</b>
+  let h = (U.form ? vForm(s) : '') + `<div class="card"><div class="row"><b>${datumDe(s.datum)} · ${schName(s.nr)}</b>
     <span class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</span>
-    <span style="flex:1"></span><button data-act="schliessen">Schicht schließen</button></div>
+    <span style="flex:1"></span><button data-act="bearbForm">Schicht bearbeiten</button>
+    ${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button></div>
     <div class="mut">Anwesend (${da.length}):</div>
     <div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div>
     ${weg.length ? `<details><summary class="mut">Gegangen (${weg.length})</summary><div class="row">${weg.map(chip).join('')}</div></details>` : ''}
@@ -227,7 +243,7 @@ function vSchicht(s) {
     <div class="row"><input id="g-nr" placeholder="Schlüsselnummer" size="12">
     <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></details></div>`;
   if (g) h += vGast(s, g);
-  const tot = s.gaeste.reduce((a, x) => { const t = gastSumme(s, x.id); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
+  const tot = s.gaeste.reduce((a, x) => { const t = gastSumme(s, x.id, true); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
   h += `<div class="card sum"><span>Schicht gesamt: ${eur(tot.soll)}</span><span>bezahlt: ${eur(tot.bez)}</span><span>Trinkgeld: ${eur(tot.tip)}</span></div>`;
   return h;
 }
@@ -258,12 +274,12 @@ function vGast(s, k) {
     `<button data-act="buche" data-k="war" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div>
   </div><div>
   <h3>Gebucht</h3>
-  <table>${buch.map(b => `<tr><td>${b.menge}× ${esc(b.name)}${b.masseur ? ` <span class="mut">(${esc(name('mas', b.masseur))})</span>` : ''}<span class="mut"> ${b.zeit}</span></td>
-    <td class="r">${eur(b.preis * b.menge)}</td><td class="r"><button class="x" data-act="buchWeg" data-v="${b.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
+  <table>${buch.map(b => `<tr><td>${b.menge}× ${esc(b.name)}${b.masseur ? ` <span class="mut">(${esc(name('mas', b.masseur))})</span>` : ''}<span class="mut"> ${b.zeit}${b.uebernommen ? ' · aus der Vorschicht' : ''}</span></td>
+    <td class="r">${eur(b.preis * b.menge)}</td><td class="r">${b.uebernommen ? '' : `<button class="x" data-act="buchWeg" data-v="${b.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
   <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
   <h3>Zahlungen</h3>
-  <table>${zahl.map(z => `<tr><td>${esc(z.art)} <span class="mut">${z.zeit}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
-    <td class="r">${eur(z.betrag)}</td><td class="r"><button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
+  <table>${zahl.map(z => `<tr><td>${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
+    <td class="r">${eur(z.betrag)}</td><td class="r">${z.uebernommen ? '' : `<button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
   <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
   <h3>Zahlung</h3>
   <div class="row"><input id="p-betrag" size="9" inputmode="decimal" placeholder="Betrag €" value="${t.offen > 0 ? (t.offen / 100).toFixed(2).replace('.', ',') : ''}">
@@ -288,7 +304,7 @@ function abrAuswahl() {
   tage.forEach(d => {
     opt.push([`tag:${d}`, `${datumDe(d)} – ganzer Tag`]);
     S.sch.filter(s => s.datum === d).sort((a, b) => a.nr - b.nr)
-      .forEach(s => opt.push([s.id, `${datumDe(d)} – Schicht ${s.nr}${s.zu ? '' : ' (offen)'}`]));
+      .forEach(s => opt.push([s.id, `${datumDe(d)} – ${schName(s.nr)}${s.zu ? '' : ' (offen)'}`]));
   });
   return opt;
 }
@@ -335,7 +351,7 @@ function kontakt(liste, i) {
 }
 function masseurDaten(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
-  const bu = sch.flatMap(s => s.buch.filter(b => b.masseur === mid).map(b => ({ ...b, s })));
+  const bu = sch.flatMap(s => s.buch.filter(b => b.masseur === mid && !b.uebernommen).map(b => ({ ...b, s })));
   const tr = sch.flatMap(s => s.zahl.flatMap(z => tipVerteilung(s, z).filter(x => x.an === 'm:' + mid).map(x => ({ s, z, betrag: x.betrag }))));
   return { bu, tr, um: summe(bu, b => b.menge * b.preis), ti: summe(tr, t => t.betrag) };
 }
@@ -343,16 +359,16 @@ function masseurText(sch, mid) {
   const d = masseurDaten(sch, mid), nm = name('mas', mid);
   const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
   return `Abrechnung ${nm} – ${datumDe(sch[0].datum)}\n\nMassagen:\n` +
-    (d.bu.map(b => `  Schicht ${b.s.nr}, ${b.zeit}, Schlüssel ${gastText(b.s, b.gast)}: ${b.name} ${eur(b.menge * b.preis)}`).join('\n') || '  keine') +
+    (d.bu.map(b => `  ${schName(b.s.nr)}, ${b.zeit}, Schlüssel ${gastText(b.s, b.gast)}: ${b.name} ${eur(b.menge * b.preis)}`).join('\n') || '  keine') +
     `\nUmsatz Massagen: ${eur(d.um)}\n\nTrinkgeld (anteilig):\n` +
-    (d.tr.map(t => `  Schicht ${t.s.nr}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
+    (d.tr.map(t => `  ${schName(t.s.nr)}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
     `\nTrinkgeld gesamt: ${eur(d.ti)}\n`;
 }
 function gesamtText(sch) {
-  const zahl = sch.flatMap(s => s.zahl.map(z => ({ ...z, s }))), buch = sch.flatMap(s => s.buch);
+  const zahl = sch.flatMap(s => s.zahl.filter(z => !z.uebernommen).map(z => ({ ...z, s }))), buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen));
   const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const tv = zahl.flatMap(z => tipVerteilung(z.s, z));
-  return `Abrechnung ${datumDe(sch[0].datum)} (${sch.map(s => 'Schicht ' + s.nr).join(', ')})\n\nEinnahmen nach Zahlungsart:\n` +
+  return `Abrechnung ${datumDe(sch[0].datum)} (${sch.map(s => schName(s.nr)).join(', ')})\n\nEinnahmen nach Zahlungsart:\n` +
     [...new Set(zahl.map(z => z.art))].map(a => { const z = zahl.filter(x => x.art === a); return `  ${a}: ${eur(sum(z, x => x.betrag))} + Trinkgeld ${eur(sum(z, x => x.tip))}`; }).join('\n') +
     `\nGesamt: ${eur(sum(zahl, x => x.betrag))} + Trinkgeld ${eur(sum(zahl, x => x.tip))}\nUmsatz gebucht: ${eur(sum(buch, b => b.menge * b.preis))}\n\nTrinkgeld je Empfänger:\n` +
     ([...new Set(tv.map(x => x.an))].map(e => `  ${empfName(e)}: ${eur(sum(tv.filter(x => x.an === e), x => x.betrag))}`).join('\n') || '  keins') + '\n';
@@ -363,21 +379,22 @@ function masseurAbrechnung(sch, mid) {
   const { bu, tr, um, ti } = masseurDaten(sch, mid);
   const m = kontakt('mas', mid);
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
-  <div class="mut">${sch.map(s => 'Schicht ' + s.nr).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
+  <div class="mut">${sch.map(s => schName(s.nr)).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
   <div class="row">${mailKnopf('Masseur*innen', [m.email], 'Abrechnung ' + name('mas', mid) + ' ' + datumDe(sch[0].datum), masseurText(sch, mid))}</div>
   <h3>Massagen</h3>` + (bu.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Massage</th><th class="r">Preis</th></tr>
-  ${bu.map(b => `<tr><td>${b.s.nr}</td><td>${b.zeit}</td><td>${esc(gastText(b.s, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
+  ${bu.map(b => `<tr><td>${schName(b.s.nr)}</td><td>${b.zeit}</td><td>${esc(gastText(b.s, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
   <tr><th colspan="4">${summe(bu, b => b.menge)} Massage(n), Umsatz</th><th class="r">${eur(um)}</th></tr></table>` : '<span class="mut">Keine Massagen.</span>') + `
   <h3>Trinkgeld (anteilig)</h3>` + (tr.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Art</th><th class="r">Betrag</th></tr>
-  ${tr.map(t => `<tr><td>${t.s.nr}</td><td>${t.z.zeit}</td><td>${esc(gastText(t.s, t.z.gast))}</td><td>${esc(t.z.art)}</td><td class="r">${eur(t.betrag)}</td></tr>`).join('')}
+  ${tr.map(t => `<tr><td>${schName(t.s.nr)}</td><td>${t.z.zeit}</td><td>${esc(gastText(t.s, t.z.gast))}</td><td>${esc(t.z.art)}</td><td class="r">${eur(t.betrag)}</td></tr>`).join('')}
   <tr><th colspan="4">Trinkgeld gesamt</th><th class="r">${eur(ti)}</th></tr></table>` : '<span class="mut">Kein Trinkgeld.</span>') + `
   <h3>Summe</h3><table><tr><td>Umsatz Massagen</td><td class="r">${eur(um)}</td></tr><tr><td>Trinkgeld</td><td class="r">${eur(ti)}</td></tr></table>
   <p style="margin-top:28px">Trinkgeld erhalten: ______________________ (Unterschrift)</p></div>`;
 }
 
 function abrechnung(sch) {
-  const buch = sch.flatMap(s => s.buch.map(b => ({ ...b, s }))), zahl = sch.flatMap(s => s.zahl.map(z => ({ ...z, s })));
-  const kopf = sch.map(s => `Schicht ${s.nr} (${esc(name('ma', s.ma))}${s.zu ? '' : ', noch offen'})`).join(' · ');
+  // Übernommene Buchungen/Zahlungen sind schon in der Schicht abgerechnet, aus der sie kommen.
+  const buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen).map(b => ({ ...b, s }))), zahl = sch.flatMap(s => s.zahl.filter(z => !z.uebernommen).map(z => ({ ...z, s })));
+  const kopf = sch.map(s => `${schName(s.nr)} (${esc(name('ma', s.ma))}${s.zu ? '' : ', noch offen'})`).join(' · ');
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   // Zahlungen nach Art
   const arten = [...new Set(zahl.map(z => z.art))];
@@ -411,7 +428,7 @@ function abrechnung(sch) {
 
   // Kunden-Detail + offene Beträge
   h += `<div class="card"><h3>Kunden (Schlüssel)</h3><table><tr><th>Schlüssel</th><th>Schicht</th><th>Zeit</th><th class="r">Gebucht</th><th class="r">Bezahlt</th><th class="r">Trinkgeld</th><th class="r">Offen</th></tr>
-  ${sch.flatMap(s => s.gaeste.map(x => { const t = gastSumme(s, x.id); return `<tr><td>${esc(kundeText(x))}</td><td>${s.nr}</td><td>${x.an || ''}${x.ab ? '–' + x.ab : ''}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
+  ${sch.flatMap(s => s.gaeste.map(x => { const t = { ...gastSumme(s, x.id, true), offen: gastSumme(s, x.id).offen }; return `<tr><td>${esc(kundeText(x))}${x.von ? ' <span class="mut">(übernommen)</span>' : ''}</td><td>${schName(s.nr)}</td><td>${x.an || ''}${x.ab ? '–' + x.ab : ''}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
   <div class="mut" style="margin-top:6px">Offene Beträge oben rot markiert – sie sind noch nicht bezahlt.</div></div>`;
   return h;
 }
@@ -451,7 +468,7 @@ function vStamm() {
 /* ---------- Aktionen ---------- */
 function gastAufnehmen(s, k) {
   const b = belegt(k.id);
-  if (b) return alert(`Schlüssel ${k.nummer} ist noch vergeben (Schicht ${b.s.nr}). Erst bei dem Gast „Gast geht“ drücken.`);
+  if (b) return alert(`Schlüssel ${k.nummer} ist noch vergeben (${schName(b.s.nr)}). Erst bei dem Gast „Gast geht“ drücken.`);
   const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ts: Date.now(), ab: '' };
   s.gaeste.push(g); U.gast = g.id;
 }
@@ -463,7 +480,7 @@ const A = {
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Text kopiert – jetzt in eine Mail einfügen.'), () => prompt('Zum Kopieren Strg+C drücken:', t));
     return false;
   },
-  schicht: v => { U.sch = v; U.gast = null; },
+  schicht: v => { U.sch = v; U.gast = null; U.form = null; },
   gast: v => { U.gast = v; },
   masWahl: v => { U.mas = v; behalte(); },
   artWahl: v => { U.art = v; behalte(); },
@@ -483,10 +500,35 @@ const A = {
   oeffnen: () => {
     const datum = $v('o-datum'), nr = +$v('o-nr');
     if (!datum) return alert('Bitte ein Datum wählen.');
-    if (S.sch.some(s => s.datum === datum && s.nr === nr)) return alert(`Schicht ${nr} wurde am ${datumDe(datum)} schon geöffnet.`);
+    if (S.sch.some(s => s.datum === datum && s.nr === nr)) return alert(`Die ${schName(nr)} wurde am ${datumDe(datum)} schon geöffnet.`);
     const mas = [...document.querySelectorAll('input[name=o-mas]:checked')].map(c => c.value);
     const s = { id: id(), datum, nr, ma: $v('o-ma'), mas, gaeste: [], buch: [], zahl: [], zu: false };
     S.sch.push(s); U.sch = s.id; U.gast = null;
+  },
+  wechselForm: () => { U.form = 'wechsel'; },
+  bearbForm: () => { U.form = 'bearb'; },
+  formAb: () => { U.form = null; },
+  bearbOk: () => {
+    const s = schicht(); if (!s) return;
+    if (!$v('w-ma')) return alert('Bitte eine Mitarbeiterin / einen Mitarbeiter wählen.');
+    s.ma = $v('w-ma'); s.mas = [...document.querySelectorAll('input[name=w-mas]:checked')].map(c => c.value); U.form = null;
+  },
+  // Wechsel: Gäste, die noch da sind, ziehen mit Schlüssel, Ankunftszeit und Buchungen in die Abendschicht um.
+  // Die Kopien tragen „uebernommen“, damit Umsatz und Einnahmen nur einmal zählen (in der Tagesschicht).
+  wechselOk: () => {
+    const alt = schicht(); if (!alt) return;
+    if (!$v('w-ma')) return alert('Bitte eine Mitarbeiterin / einen Mitarbeiter für die Abendschicht wählen.');
+    if (S.sch.some(x => x.datum === alt.datum && x.nr === 2)) return alert('Für diesen Tag gibt es die Abendschicht schon.');
+    const neu = { id: id(), datum: alt.datum, nr: 2, ma: $v('w-ma'), mas: [...document.querySelectorAll('input[name=w-mas]:checked')].map(c => c.value), gaeste: [], buch: [], zahl: [], zu: false };
+    const jetzt = uhr();
+    alt.gaeste.filter(g => g.da).forEach(g => {
+      const ng = { id: id(), kun: g.kun, name: g.name, da: true, an: g.an, ts: g.ts, ab: '', von: g.id };
+      neu.gaeste.push(ng);
+      alt.buch.filter(b => b.gast === g.id).forEach(b => neu.buch.push({ ...b, id: id(), gast: ng.id, uebernommen: true }));
+      alt.zahl.filter(z => z.gast === g.id).forEach(z => neu.zahl.push({ ...z, id: id(), gast: ng.id, tip: 0, tipAn: '', uebernommen: true }));
+      g.da = false; g.ab = jetzt;
+    });
+    alt.zu = true; S.sch.push(neu); U.sch = neu.id; U.gast = null; U.form = null;
   },
   schliessen: () => {
     const s = schicht(); if (!s) return;
@@ -524,7 +566,7 @@ const A = {
     const s = schicht(); if (!s || !U.gast) return;
     const betrag = cent($v('p-betrag')), tip = cent($v('p-tip'));
     if (betrag <= 0 && tip <= 0) return alert('Bitte Betrag oder Trinkgeld eingeben.');
-    s.zahl.push({ id: id(), gast: U.gast, betrag, tip, art: U.art, tipAn: tip ? U.tipAn : '', zeit: uhr() });
+    s.zahl.push({ id: id(), ma: s.ma, gast: U.gast, betrag, tip, art: U.art, tipAn: tip ? U.tipAn : '', zeit: uhr() });
   },
   zahlWeg: v => { const s = schicht(); if (confirm('Zahlung löschen?')) s.zahl = s.zahl.filter(z => z.id !== v); },
   neu: (_, el) => {
