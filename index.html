@@ -55,6 +55,12 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .chip.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
 .sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
+#gl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#gl .anz{background:#fff;color:var(--acc);font-weight:700;border-radius:20px;padding:10px 16px;font-size:17px}
+#pop{position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
+#pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
+#pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+#pop button.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
 .noprint{}
 .printonly{display:none}
 @media print{
@@ -69,6 +75,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <header class="noprint">
   <h1>Sauna-Kasse</h1>
   <span id="nav"></span>
+  <span id="gl"></span>
   <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
   <button id="wolke" hidden class="noprint"></button>
   <span id="netz" hidden style="background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span></span>
@@ -82,7 +89,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Bar', tipAn: 'auto', neu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Bar', tipAn: 'auto', neu: false, pop: null, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -161,10 +168,31 @@ function gastSumme(s, k, neu) {
 function render() {
   $('nav').innerHTML = [['kasse', 'Kasse'], ['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
     .map(([t, l]) => `<button class="${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
+  $('gl').innerHTML = gLeiste();
   const keep = U.keep; U.keep = null;
   $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
   markiere();
+}
+
+// Gästeleiste im Kopf, auf jedem Reiter sichtbar, solange eine Schicht offen ist: aktueller Gast (Tipp = die anderen
+// Anwesenden), Zahl der belegten Schlüssel, Neuer Gast, Gegangene Gäste und die Schicht. Die Karte in der Kasse bleibt
+// daneben unverändert – die Leiste ist ein zweiter Weg, kein Ersatz.
+function gLeiste() {
+  const s = schicht(); if (!s) return '';
+  const off = offeneSchichten();
+  const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
+  const aktiv = off.reduce((n, x) => n + x.gaeste.filter(g => g.da).length, 0);
+  const cur = s.gaeste.find(x => x.id === U.gast);
+  const chip = x => `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}">🔑 ${esc(kundeText(x))}</button>`;
+  let h = `<button class="${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">🔑 ${cur ? esc(kundeText(cur)) : 'Kein Gast'} ▾</button>
+    <span class="anz">${aktiv} aktiv</span>
+    <button data-act="neuGastTop">➕ Neuer Gast</button>
+    <button class="${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">Gegangen (${weg.length}) ▾</button>
+    ${off.length > 1 ? `<button data-act="schTop" data-v="${(off.find(x => x.id !== s.id) || s).id}">${schName(s.nr)} ⇄</button>` : `<span class="anz">${schName(s.nr)}</span>`}`;
+  if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${da.length}) – Gast wählen:</div><div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div></div>`;
+  if (U.pop === 'weg') h += `<div id="pop"><div class="mut">Gegangene Gäste (${weg.length}):</div><div class="row">${weg.map(chip).join('') || '<span class="mut">Noch niemand gegangen.</span>'}</div></div>`;
+  return h;
 }
 
 // Rot färben ohne neu zu zeichnen, damit angefangene Eingaben nicht verloren gehen.
@@ -676,6 +704,11 @@ const A = {
   neuGast: () => { U.neu = true; },
   neuAb: () => { U.neu = false; },
   gast: v => { U.gast = v; },
+  // Die Leiste im Kopf: Auswahl öffnet/schließt die Liste; jede andere Aktion schließt sie (siehe Klick-Behandlung unten).
+  pop: v => { U.pop = U.pop === v ? null : v; },
+  gastTop: v => { U.gast = v; U.tab = 'kasse'; U.form = null; },
+  neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
+  schTop: v => { U.sch = v; U.gast = null; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   artWahl: v => { U.art = v; behalte(); },
   tipAnWahl: v => { U.tipAn = v; behalte(); },
@@ -788,7 +821,10 @@ const A = {
 };
 
 document.addEventListener('click', e => {
-  const el = e.target.closest('[data-act]'); if (!el || el.tagName === 'SELECT') return;
+  // Tipp außerhalb des Kopfes oder auf eine andere Aktion klappt die Liste der Leiste wieder zu.
+  const el = e.target.closest('[data-act]');
+  if (U.pop && (!e.target.closest('header') || (el && el.dataset.act !== 'pop'))) { U.pop = null; if (!el) render(); }
+  if (!el || el.tagName === 'SELECT') return;
   if (A[el.dataset.act](el.dataset.v, el) === false) return;
   speichern(); render();
 });
