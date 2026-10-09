@@ -66,6 +66,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+.zblock{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0;background:#fcfaf7}
 .k4.timer{font-variant-numeric:tabular-nums;font-weight:600}
 .chip .rest{font-variant-numeric:tabular-nums;font-size:.85em;margin-left:6px;opacity:.9}
 .chip .rest.ueber{font-weight:700;opacity:1}
@@ -168,7 +169,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-betrag', 'p-tip', 'x-betrag', 'g-nr', 'g-name'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'p-m-betrag', 'p-m-tip', 'x-betrag', 'g-nr', 'g-name'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -212,6 +213,23 @@ function gastSumme(s, k, neu) {
   const gesamt = sum(bu, b => b.preis * b.menge) - sum(za, z => z.betrag);
   const nb = neu ? bu.filter(b => !b.uebernommen) : bu, nz = neu ? za.filter(z => !z.uebernommen) : za;
   return { soll: sum(nb, b => b.preis * b.menge), bez: sum(nz, z => z.betrag), tip: sum(nz, z => z.tip), offen: gesamt };
+}
+
+// Zwei Zahlblöcke je Gast: „Sauna“ (Leistungen und Waren, kassiert der Mitarbeiter am Tresen) und „Massage“ (verkaufen die
+// Masseure selbst, der Tresen nimmt nur das Geld). Eine Massage-Buchung trägt ihren Masseur (b.masseur), alles andere
+// zählt zur Sauna. Offen wird getrennt gerechnet; Zahlungen ohne kat (früher gebucht) mindern erst die Sauna, den Rest
+// die Massagen. „je“ ist der offene Betrag je Masseur.
+function offenKat(s, k) {
+  const bu = s.buch.filter(b => b.gast === k), za = s.zahl.filter(z => z.gast === k);
+  const sum = (a, f) => a.reduce((x, y) => x + f(y), 0), wert = b => b.preis * b.menge;
+  const sauna = sum(bu.filter(b => !b.masseur), wert), massage = sum(bu.filter(b => b.masseur), wert);
+  const alt = sum(za.filter(z => !z.kat), z => z.betrag);
+  let offS = sauna - sum(za.filter(z => z.kat === 'sauna'), z => z.betrag), offM = massage - sum(za.filter(z => z.kat === 'massage'), z => z.betrag);
+  const ausS = Math.min(alt, Math.max(0, offS)); offS -= ausS; offM -= alt - ausS;
+  const je = {};
+  bu.filter(b => b.masseur).forEach(b => { je[b.masseur] = (je[b.masseur] || 0) + wert(b); });
+  za.filter(z => z.kat === 'massage' && z.masseur).forEach(z => { je[z.masseur] = (je[z.masseur] || 0) - z.betrag; });
+  return { sauna: Math.max(0, offS), massage: Math.max(0, offM), je, saunaGebucht: sauna, massageJe: m => bu.filter(b => b.masseur === m).reduce((x, b) => x + wert(b), 0) };
 }
 
 // Farbe des Schlüssels: offener Betrag → rot, alles bezahlt (und etwas gebucht) → grün, sonst neutral.
@@ -550,12 +568,24 @@ function extraOptionen(s) {
   const ma = [s.ma, ...aktive('ma').map(m => m.id).filter(i => i !== s.ma)];
   return [...ma.map(m => ['p:' + m, 'Mitarbeiter ' + name('ma', m)]), ...s.mas.map(m => ['m:' + m, 'Masseur ' + name('mas', m)])];
 }
+// Ein Zahlblock („s“ Sauna, „m“ Massage): Betrag, Zahlart (rechts daneben), Trinkgeld in Prozent oder frei, Buchen.
+function zahlBlock(b, rest, titel, hinweis) {
+  const art = ['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('');
+  return `<div class="zblock"><h3 style="margin-top:0">${titel}</h3>
+  <div class="row"><input id="p-${b}-betrag" size="9" inputmode="decimal" placeholder="Betrag €" value="${rest > 0 ? (rest / 100).toFixed(2).replace('.', ',') : ''}">
+    <div class="seg">${art}</div>
+    ${rest > 0 ? `<button data-act="restSetzen" data-b="${b}" data-v="${rest}">Rest ${eur(rest)}</button>` : ''}</div>
+  <div class="row tip"><input id="p-${b}-tip" size="9" inputmode="decimal" placeholder="Trinkgeld €">
+    ${[5, 10, 15].map(c => `<button data-act="tipProz" data-b="${b}" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer" data-b="${b}">Kein</button></div>
+  <div class="mut" id="p-${b}-hint">${hinweis}</div>
+  <div class="row" style="margin-top:8px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle${b === 's' ? 'S' : 'M'}">${b === 's' ? 'Sauna buchen' : 'Massage buchen'}</button></div></div>`;
+}
 function vGast(s, k) {
   const go = s.gaeste.find(x => x.id === k);
   const t = gastSumme(s, k);
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
-  const extra = extraOptionen(s);
+  const extra = extraOptionen(s), ok = offenKat(s, k);
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
@@ -577,19 +607,11 @@ function vGast(s, k) {
     <td class="r">${eur(b.preis * b.menge)}</td><td class="r">${b.uebernommen ? '' : `<button class="x" data-act="buchWeg" data-v="${b.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
   <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
   <h3>Zahlungen</h3>
-  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Sonstiges Trinkgeld · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
+  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Sonstiges Trinkgeld · ' : z.kat === 'sauna' ? 'Sauna · ' : z.kat === 'massage' ? 'Massage' + (z.masseur ? ' (' + esc(name('mas', z.masseur)) + ')' : '') + ' · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
     <td class="r">${eur(z.betrag)}</td><td class="r">${z.uebernommen ? '' : `<button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
   <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
-  <h3>Zahlung</h3>
-  <div class="row"><input id="p-betrag" size="9" inputmode="decimal" placeholder="Betrag €" value="${t.offen > 0 ? (t.offen / 100).toFixed(2).replace('.', ',') : ''}">
-    <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div>
-    ${t.offen > 0 ? `<button data-act="restSetzen" data-v="${t.offen}">Rest ${eur(t.offen)}</button>` : ''}</div>
-  <h3>Trinkgeld</h3>
-  <div class="row tip"><input id="p-tip" size="9" inputmode="decimal" placeholder="Trinkgeld €">
-    ${[5, 10, 15].map(c => `<button data-act="tipProz" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer">Kein</button></div>
-  <div class="mut" id="p-tip-hint">Prozent antippen oder eine freie Summe ins Feld schreiben.</div>
-  <div class="row" style="margin-top:12px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle">Zahlung buchen</button></div>
-  <div class="mut">Mehrere Teilzahlungen sind möglich. Das Trinkgeld wird immer anteilig nach dem Massage-Anteil verteilt.</div>
+  ${zahlBlock('s', ok.sauna, 'Sauna', 'Das Trinkgeld geht an ' + esc(name('ma', s.ma)) + ' (Kasse).')}
+  ${zahlBlock('m', Math.max(0, Math.min(ok.je[U.mas] || 0, ok.massage)), 'Massage' + (U.mas ? ' · ' + esc(name('mas', U.mas)) : ''), U.mas ? 'Das Trinkgeld geht an ' + esc(name('mas', U.mas)) + '.' : 'Oben in der Zeile einen Masseur antippen.')}
   <div class="row" style="margin-top:12px"><button data-act="extraSchalter">Sonstiges Trinkgeld</button></div>
   ${U.extra ? `<div class="modal" role="dialog" aria-label="Sonstiges Trinkgeld"><div class="card">
     <h2>Sonstiges Trinkgeld</h2>
@@ -804,7 +826,7 @@ const A = {
   gastTop: (v, el) => { U.gast = v; if (el && el.dataset.sch) U.sch = el.dataset.sch; U.gastZu = false; U.extra = false; U.tab = 'kasse'; U.form = null; },
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
-  masWahl: v => { U.mas = v; behalte(); },
+  masWahl: v => { U.mas = v; behalte(); if (U.keep) delete U.keep['p-m-betrag']; },   // Vorbelegung gehört zum Masseur
   artWahl: v => { U.art = v; behalte(); },
   extraSchalter: () => { U.extra = !U.extra; U.extraSel = []; },
   extraWahl: v => { U.extraSel = U.extraSel.includes(v) ? U.extraSel.filter(x => x !== v) : [...U.extraSel, v]; behalte(); },
@@ -819,15 +841,17 @@ const A = {
     U.extra = false; U.extraSel = [];
   },
   // Ohne Neuzeichnen: nur das Feld füllen, damit nichts verspringt.
-  // Prozent vom Betrag dieser Zahlung (bei Teilzahlung also vom Teilbetrag); ist das Feld leer, vom Gesamtbetrag des Gastes.
-  tipProz: v => {
-    const s = schicht(), basis = cent($v('p-betrag')) || gastSumme(s, U.gast).soll;
-    $('p-tip').value = (Math.round(basis * v / 100) / 100).toFixed(2).replace('.', ',');
-    $('p-tip-hint').textContent = `${v} % von ${eur(basis)}`;
+  // Prozent vom Betrag dieses Blocks (bei Teilzahlung also vom Teilbetrag); ist das Feld leer, vom Gebuchten der Gruppe
+  // (Sauna: Leistungen und Waren; Massage: die Massagen des gewählten Masseurs).
+  tipProz: (v, el) => {
+    const b = el.dataset.b, s = schicht(), ok = offenKat(s, U.gast);
+    const basis = cent($v(`p-${b}-betrag`)) || (b === 's' ? ok.saunaGebucht : ok.massageJe(U.mas));
+    $(`p-${b}-tip`).value = (Math.round(basis * v / 100) / 100).toFixed(2).replace('.', ',');
+    $(`p-${b}-hint`).textContent = `${v} % von ${eur(basis)}`;
     return false;
   },
-  tipLeer: () => { $('p-tip').value = ''; $('p-tip-hint').textContent = 'Kein Trinkgeld.'; return false; },
-  restSetzen: v => { $('p-betrag').value = (v / 100).toFixed(2).replace('.', ','); return false; },
+  tipLeer: (_, el) => { const b = el.dataset.b; $(`p-${b}-tip`).value = ''; $(`p-${b}-hint`).textContent = 'Kein Trinkgeld.'; return false; },
+  restSetzen: (v, el) => { $(`p-${el.dataset.b}-betrag`).value = (v / 100).toFixed(2).replace('.', ','); return false; },
   abrWahl: () => { U.abr = $v('abr-sel'); },
   abrFuer: () => { U.fuer = $v('abr-fuer'); },
   oeffnen: () => {
@@ -910,12 +934,10 @@ const A = {
     if (!confirm(b.menge > 1 ? `Eine Einheit „${b.name}“ entfernen?` : 'Buchung löschen?')) return;
     if (b.menge > 1) b.menge -= 1; else s.buch = s.buch.filter(x => x.id !== v);
   },
-  zahle: () => {
-    const s = schicht(); if (!s || !U.gast) return;
-    const betrag = cent($v('p-betrag')), tip = cent($v('p-tip'));
-    if (betrag <= 0 && tip <= 0) return alert('Bitte Betrag oder Trinkgeld eingeben.');
-    s.zahl.push({ id: id(), ma: s.ma, gast: U.gast, betrag, tip, art: U.art, tipAn: tip ? 'auto' : '', zeit: uhr() });
-  },
+  // Sauna: Trinkgeld an den Mitarbeiter an der Kasse. Massage: Trinkgeld an den gewählten Masseur. Anteilig verteilt wird
+  // bei neuen Zahlungen nicht mehr (tipVerteilung kennt „auto“ nur noch für früher gebuchte).
+  zahleS: () => zahleBlock('s'),
+  zahleM: () => zahleBlock('m'),
   zahlWeg: v => { const s = schicht(); if (confirm('Zahlung löschen?')) s.zahl = s.zahl.filter(z => z.id !== v); },
   neu: (_, el) => {
     const g = STAMM.find(x => x.id === el.dataset.g), o = { id: id(), ...(g.set || {}) };
@@ -949,6 +971,18 @@ const A = {
     S.sch = []; U.sch = null; U.gast = null; U.abr = null; U.form = null; U.neu = false; U.pop = null; U.tab = 'kasse';
   }
 };
+function zahleBlock(b) {
+  const s = schicht(); if (!s || !U.gast) return false;
+  const betrag = cent($v(`p-${b}-betrag`)), tip = cent($v(`p-${b}-tip`));
+  if (betrag <= 0 && tip <= 0) { alert('Bitte Betrag oder Trinkgeld eingeben.'); return false; }
+  const z = { id: id(), ma: s.ma, gast: U.gast, betrag, tip, art: U.art, zeit: uhr() };
+  if (b === 's') { z.kat = 'sauna'; z.tipAn = tip ? 'p:' + s.ma : ''; }
+  else {
+    if (!U.mas) { alert('Bitte oben in der Zeile einen Masseur antippen.'); return false; }
+    z.kat = 'massage'; z.masseur = U.mas; z.tipAn = tip ? 'm:' + U.mas : '';
+  }
+  s.zahl.push(z);
+}
 function sicherungHerunterladen(dateiname) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
