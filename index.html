@@ -66,7 +66,6 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
-.mieteoben{margin:10px 0 4px;padding:8px 12px;border:2px solid var(--acc);border-radius:8px;font-size:18px}
 .vermerk{margin-top:14px;padding:8px 12px;border:1px dashed var(--line);border-radius:8px;background:#fcfaf7;font-size:15px}
 .zblock{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0;background:#fcfaf7}
 .k4.timer{font-variant-numeric:tabular-nums;font-weight:600}
@@ -751,11 +750,8 @@ function abrechnung(sch) {
   const kopf = sch.map(s => `${schName(s.nr)} (${esc(name('ma', s.ma))}${s.zu ? '' : ', noch offen'})`).join(' · ');
   const arten = [...new Set(zahl.map(z => z.art))];
   const mas_ = [...new Set(sch.map(s => s.ma))].map(i => kontakt('ma', i));
-  // Die Miete steht auch ganz oben, damit sie im Ausdruck als Erstes ins Auge fällt.
-  const mietJe = mieteJe.map(x => `${esc(name('mas', x.m))} ${eur(x.miete)}`).join(' · ');
   const alt = zahl.some(z => !z.kat && !z.extra);
   let h = `<div class="card"><h2>Abrechnung Sauna ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
-  <div class="mieteoben"><b>Miete Massagen (${MIETE_PROZENT} %): ${eur(mieteU)}</b>${mietJe ? ` <span class="mut">· ${mietJe}</span>` : ''}</div>
   <div class="row">${mailKnopf('Mitarbeiter*innen', mas_.map(m => m.email), 'Abrechnung Sauna ' + datumDe(sch[0].datum), gesamtText(sch))}</div>
   <h3>Einnahmen nach Zahlungsart</h3><table><tr><th>Art</th><th class="r">Rechnung</th><th class="r">Trinkgeld</th><th class="r">Eingenommen</th></tr>
   ${arten.map(a => { const z = zahl.filter(x => x.art === a); const b = summe(z, x => x.betrag), t = summe(z, x => x.tipS); return `<tr><td>${esc(a)}</td><td class="r">${eur(b)}</td><td class="r">${eur(t)}</td><td class="r">${eur(b + t)}</td></tr>`; }).join('')}
