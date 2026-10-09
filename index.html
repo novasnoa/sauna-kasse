@@ -6,6 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#8a4b1f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Sauna-Kasse</title>
 <style>
 /* Warum eine einzige Datei: läuft offline auf Tablet/PC, kein Server, keine Installation.
@@ -66,6 +69,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <header class="noprint">
   <h1>Sauna-Kasse</h1>
   <span id="nav"></span>
+  <span id="netz" hidden style="margin-left:auto;background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span>
 </header>
 <main id="app"></main>
 
@@ -166,6 +170,14 @@ function markiere() {
 }
 setInterval(markiere, 30000);
 
+/* ---------- Offline ---------- */
+// Die Buchungen liegen im Browser, die Seite selbst im Zwischenspeicher des Service Workers (sw.js).
+function netzAnzeige() { $('netz').hidden = navigator.onLine; }
+addEventListener('online', netzAnzeige); addEventListener('offline', netzAnzeige); netzAnzeige();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Bitte den Browser, die Daten nicht von selbst aufzuräumen, wenn der Speicher knapp wird.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
 function vKasse() {
   const off = offeneSchichten();
   const s = schicht();
@@ -259,7 +271,8 @@ function vGast(s, k) {
   <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div>
   <h3>Trinkgeld</h3>
   <div class="row tip"><input id="p-tip" size="9" inputmode="decimal" placeholder="Trinkgeld €">
-    ${[100, 200, 500, 1000].map(c => `<button data-act="tipPlus" data-v="${c}">+${c / 100} €</button>`).join('')}<button data-act="tipPlus" data-v="0">0</button></div>
+    ${[5, 10, 15].map(c => `<button data-act="tipProz" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer">Kein</button></div>
+  <div class="mut" id="p-tip-hint">Prozent antippen oder eine freie Summe ins Feld schreiben.</div>
   <div class="mut">Trinkgeld geht an:</div>
   <div class="seg">${empf.map(([v, l]) => `<button class="${v === U.tipAn ? 'on' : ''}" data-act="tipAnWahl" data-v="${v}">${esc(l)}</button>`).join('')}</div>
   <div class="row" style="margin-top:12px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle">Zahlung buchen</button></div>
@@ -456,7 +469,14 @@ const A = {
   artWahl: v => { U.art = v; behalte(); },
   tipAnWahl: v => { U.tipAn = v; behalte(); },
   // Ohne Neuzeichnen: nur das Feld füllen, damit nichts verspringt.
-  tipPlus: v => { const e = $('p-tip'); e.value = +v ? ((cent(e.value) + +v) / 100).toFixed(2).replace('.', ',') : ''; return false; },
+  // Prozent vom Betrag dieser Zahlung (bei Teilzahlung also vom Teilbetrag); ist das Feld leer, vom Gesamtbetrag des Gastes.
+  tipProz: v => {
+    const s = schicht(), basis = cent($v('p-betrag')) || gastSumme(s, U.gast).soll;
+    $('p-tip').value = (Math.round(basis * v / 100) / 100).toFixed(2).replace('.', ',');
+    $('p-tip-hint').textContent = `${v} % von ${eur(basis)}`;
+    return false;
+  },
+  tipLeer: () => { $('p-tip').value = ''; $('p-tip-hint').textContent = 'Kein Trinkgeld.'; return false; },
   restSetzen: v => { $('p-betrag').value = (v / 100).toFixed(2).replace('.', ','); return false; },
   abrWahl: () => { U.abr = $v('abr-sel'); },
   abrFuer: () => { U.fuer = $v('abr-fuer'); },

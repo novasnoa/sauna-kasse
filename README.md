@@ -14,3 +14,13 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Abrechnung je Schicht oder Tag zum Drucken (Zahlungsarten, Umsatz, Masseure, Trinkgeld, offene Beträge)
 
 Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelmäßig herunterladen.
+
+## Offline
+
+`sw.js` legt die Seite beim ersten Öffnen mit Netz im Zwischenspeicher ab; danach startet die Kasse auch ohne WLAN
+(auf dem iPad „Zum Home-Bildschirm“ wählen). Netz zuerst, Zwischenspeicher nur als Rückfall – so ist eine neue
+Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint „Offline“, solange kein Netz da ist.
+
+## Trinkgeld
+
+5 % / 10 % / 15 % vom Betrag der Zahlung (ist er leer: vom Gesamtbetrag des Gastes) oder freie Summe im Feld.
