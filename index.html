@@ -79,6 +79,11 @@ button.k4.mt{cursor:pointer;font-weight:600}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
 #pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 #pop button.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
+/* Schlüsselfarbe nach Zahlstand (zahlKlasse): offen rot, bezahlt grün. Der gewählte Gast behält seine Farbe und bekommt einen Ring. */
+.k4.offen,.chip.offen,#pop button.chip.offen{background:var(--warn);color:#fff;border-color:var(--warn)}
+.k4.bezahlt,.chip.bezahlt,#pop button.chip.bezahlt{background:var(--ok);color:#fff;border-color:var(--ok)}
+.chip.on.offen,.chip.on.bezahlt,#pop button.chip.on.offen,#pop button.chip.on.bezahlt{box-shadow:0 0 0 2px #fff,0 0 0 5px var(--acc)}
+.chip.rot.bezahlt,#pop button.chip.rot.bezahlt{background:var(--warn);border-color:var(--warn)}   /* über vier Stunden im Haus bleibt rot, auch wenn bezahlt */
 /* Querformat (Tablet): alles in einer Zeile – etwas engere Knöpfe, damit Olivin, Gästeleiste und Verweise nebeneinander
    passen. Steht bewusst NACH den Grundregeln von #gl, #re und #nav: gleiche Gewichtung, die spätere gewinnt. */
 @media(min-width:980px){
@@ -204,6 +209,10 @@ function gastSumme(s, k, neu) {
   return { soll: sum(nb, b => b.preis * b.menge), bez: sum(nz, z => z.betrag), tip: sum(nz, z => z.tip), offen: gesamt };
 }
 
+// Farbe des Schlüssels: offener Betrag → rot, alles bezahlt (und etwas gebucht) → grün, sonst neutral.
+// Die Rotfärbung nach vier Stunden (markiere) bleibt daneben bestehen.
+function zahlKlasse(s, id) { const t = gastSumme(s, id); return t.offen > 0 ? 'offen' : t.soll > 0 ? 'bezahlt' : ''; }
+
 /* ---------- Anzeige ---------- */
 function render() {
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
@@ -227,7 +236,7 @@ function gLeiste() {
   const weg = off.reduce((n, x) => n + x.gaeste.filter(g => !g.da).length, 0);
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
-    return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   // Drei gleich große Schalter (g3), dann mit etwas Abstand der Schichten-Schalter (sch).
   let h = `<button class="g3 ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
     <button class="g3 ${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">${weg} gegangen ▾</button>
@@ -527,7 +536,7 @@ function vGast(s, k) {
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
-  return `<div class="card"><div class="k4row"><span class="k4">🔑 ${esc(kundeText(go))}</span>
+  return `<div class="card"><div class="k4row"><span class="k4 ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : ''}">🔑 ${esc(kundeText(go))}</span>
   ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
