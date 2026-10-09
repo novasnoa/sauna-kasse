@@ -683,7 +683,8 @@ function vStamm() {
     <button style="margin-left:auto" class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
   if (U.st === 'sich') return tabs + vSync() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
-    <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div></div>`;
+    <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div>
+    <div class="row"><button class="x" style="font-size:16px;padding:10px 14px" data-act="buchungenLoeschen">Alle Buchungen löschen (Stammdaten bleiben)</button></div></div>`;
   const liste = aktive(g.k).filter(g.filter || (() => true));
   const editZeile = x => `<tr><td colspan="3"><div class="row">${g.f.map(([f, l]) => `<input id="e-${f}" placeholder="${l}" ${FELDTYP[f] || ''} value="${esc(f === 'preis' ? (x.preis / 100).toFixed(2).replace('.', ',') : (x[f] || ''))}">`).join('')}
     <button class="ok" data-act="aendSave" data-g="${g.id}" data-v="${x.id}">Speichern</button> <button data-act="aendAb">Abbrechen</button></div></td></tr>`;
@@ -833,12 +834,26 @@ const A = {
     for (const [f] of g.f) { const e = $('e-' + f); o[f] = f === 'preis' ? cent(e.value) : e.value.trim(); }
     U.edit = null;
   },
-  export: () => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
-    a.download = `sauna-kasse-${heute()}.json`; a.click(); return false;
+  export: () => { sicherungHerunterladen(`sauna-kasse-${heute()}.json`); return false; },
+  // Alles Buchungsartige weg, die Stammdaten (Mitarbeiter, Masseure, Leistungen, Waren, Schlüssel) bleiben.
+  // Warum zwei Sicherungen vor dem Löschen: ein Gerät mit eingeschaltetem Abgleich verbreitet das Löschen über
+  // die Löschvermerke (S.tot, siehe stempeln) auf alle Geräte und ins Google-Konto – ohne Sicherung gäbe es
+  // keinen Weg zurück. Darum lädt der Knopf sie selbst herunter, bevor er die zweite Frage stellt.
+  buchungenLoeschen: () => {
+    const n = { sch: S.sch.length, g: 0, b: 0, z: 0 };
+    S.sch.forEach(s => { n.g += (s.gaeste || []).length; n.b += (s.buch || []).length; n.z += (s.zahl || []).length; });
+    if (!n.sch) { alert('Es gibt keine Schichten, die gelöscht werden könnten.'); return false; }
+    if (!confirm(`Wirklich ALLE Buchungen löschen?\n\n${n.sch} Schicht(en), ${n.g} Gast-Aufenthalte, ${n.b} Buchungen, ${n.z} Zahlungen.\n\nMitarbeiter, Masseure, Leistungen, Waren und Schlüssel bleiben.\nVorher wird eine Sicherung heruntergeladen.${G.an ? '\n\nDer Google-Abgleich ist an: das Löschen gilt beim nächsten Abgleich auf ALLEN Geräten.' : ''}`)) return false;
+    sicherungHerunterladen(`sauna-kasse-VOR-DEM-LOESCHEN-${heute()}-${uhr().replace(':', '')}.json`);
+    if ((prompt('Die Sicherung wurde heruntergeladen. Zum Löschen bitte das Wort LÖSCHEN eintippen:') || '').trim().toLowerCase() !== 'löschen') { alert('Nichts gelöscht.'); return false; }
+    S.sch = []; U.sch = null; U.gast = null; U.abr = null; U.form = null; U.neu = false; U.pop = null; U.tab = 'kasse';
   }
 };
+function sicherungHerunterladen(dateiname) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
+  a.download = dateiname; a.click();
+}
 
 document.addEventListener('click', e => {
   // Tipp außerhalb des Kopfes oder auf eine andere Aktion klappt die Liste der Leiste wieder zu.
