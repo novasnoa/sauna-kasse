@@ -650,7 +650,7 @@ function vAbr() {
   // Masseure, die in den gewählten Schichten gearbeitet oder etwas verdient haben
   const mids = [...new Set(sch.flatMap(s => [...s.mas, ...s.buch.filter(b => b.masseur).map(b => b.masseur)]))];
   if (U.fuer !== 'ges' && U.fuer !== 'alle' && !mids.includes(U.fuer)) U.fuer = 'ges';
-  const fuer = [['ges', 'Gesamtabrechnung Kasse'], ['alle', 'Alle Masseure (je eine Seite)'], ...mids.map(m => [m, 'Masseur ' + name('mas', m)])];
+  const fuer = [['ges', 'Abrechnung Sauna'], ['alle', 'Abrechnung Massage – alle Masseure (je eine Seite)'], ...mids.map(m => [m, 'Abrechnung Massage – ' + name('mas', m)])];
   return `<div class="row noprint"><select id="abr-sel" data-act="abrWahl">${opt.map(([v, l]) => `<option value="${v}" ${v === U.abr ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <select id="abr-fuer" data-act="abrFuer">${fuer.map(([v, l]) => `<option value="${v}" ${v === U.fuer ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
     <button class="p" onclick="window.print()">🖨 Drucken</button></div>` +
@@ -698,14 +698,32 @@ function masseurText(sch, mid) {
     (d.tr.map(t => `  ${schName(t.s.nr)}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
     `\nTrinkgeld gesamt: ${eur(d.ti)}\n\nVermerk: Miete ${MIETE_PROZENT} % vom Massagepreis (ohne Trinkgeld) auf ${eur(d.um)} = ${eur(d.mi)}.\nDie Miete wird zu einem späteren Zeitpunkt per Rechnung bezahlt und hier nicht abgezogen.\n`;
 }
+// Die Abrechnung ist zweigeteilt: „Sauna“ enthält alles außer den Massagen, „Massage“ ist die Abrechnung je Masseur
+// (masseurAbrechnung, unverändert). Sauna: keine Massage-Buchungen, keine Massage-Zahlungen (kat „massage“) und vom
+// Trinkgeld nur, was nicht an Masseure geht – das steht in deren Abrechnung. Zahlungen ohne kat (früher gebucht) und
+// Sonstiges Trinkgeld bleiben in der Sauna-Abrechnung. Unten stehen die Massagen mit der Miete, die in Rechnung zu stellen ist.
+function saunaDaten(sch) {
+  const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  const buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen).map(b => ({ ...b, s })));
+  const sbu = buch.filter(b => !b.masseur), mbu = buch.filter(b => b.masseur);
+  const nichtM = x => !String(x.an).startsWith('m:');
+  const zahl = sch.flatMap(s => s.zahl.filter(z => !z.uebernommen && z.kat !== 'massage').map(z => ({ ...z, s })))
+    .map(z => ({ ...z, tipS: summe(tipVerteilung(z.s, z).filter(nichtM), x => x.betrag) }));
+  const tv = zahl.flatMap(z => tipVerteilung(z.s, z).filter(nichtM));
+  const mids = [...new Set(mbu.map(b => b.masseur))];
+  const mieteJe = mids.map(m => ({ m, bu: mbu.filter(b => b.masseur === m) }))
+    .map(x => ({ ...x, anz: summe(x.bu, b => b.menge), preis: summe(x.bu, b => b.menge * b.preis), miete: summe(x.bu, miete) }));
+  return { summe, buch, sbu, mbu, zahl, tv, mids, mieteJe, saunaU: summe(sbu, b => b.menge * b.preis), mieteU: summe(mbu, miete) };
+}
 function gesamtText(sch) {
-  const zahl = sch.flatMap(s => s.zahl.filter(z => !z.uebernommen).map(z => ({ ...z, s }))), buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen));
-  const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
-  const tv = zahl.flatMap(z => tipVerteilung(z.s, z));
-  return `Abrechnung ${datumDe(sch[0].datum)} (${sch.map(s => schName(s.nr)).join(', ')})\n\nEinnahmen nach Zahlungsart:\n` +
-    [...new Set(zahl.map(z => z.art))].map(a => { const z = zahl.filter(x => x.art === a); return `  ${a}: ${eur(sum(z, x => x.betrag))} + Trinkgeld ${eur(sum(z, x => x.tip))}`; }).join('\n') +
-    `\nGesamt: ${eur(sum(zahl, x => x.betrag))} + Trinkgeld ${eur(sum(zahl, x => x.tip))}\nUmsatz gebucht: ${eur(sum(buch, b => b.menge * b.preis))}\n\nSaunaeinnahmen:\n  Leistungen und Waren: ${eur(sum(buch.filter(b => !b.masseur), b => b.menge * b.preis))}\n  Miete Massagen (${MIETE_PROZENT} % von ${eur(sum(buch.filter(b => b.masseur), b => b.menge * b.preis))}): ${eur(sum(buch.filter(b => b.masseur), miete))}\n  Gesamt: ${eur(sum(buch.filter(b => !b.masseur), b => b.menge * b.preis) + sum(buch.filter(b => b.masseur), miete))}\n\nTrinkgeld je Empfänger:\n` +
-    ([...new Set(tv.map(x => x.an))].map(e => `  ${empfName(e)}: ${eur(sum(tv.filter(x => x.an === e), x => x.betrag))}`).join('\n') || '  keins') + '\n';
+  const d = saunaDaten(sch), { summe, zahl, tv, saunaU, mieteU, mieteJe } = d;
+  return `Abrechnung Sauna ${datumDe(sch[0].datum)} (${sch.map(s => schName(s.nr)).join(', ')})\n\nEinnahmen nach Zahlungsart:\n` +
+    [...new Set(zahl.map(z => z.art))].map(a => { const z = zahl.filter(x => x.art === a); return `  ${a}: ${eur(summe(z, x => x.betrag))} + Trinkgeld ${eur(summe(z, x => x.tipS))}`; }).join('\n') +
+    `\nGesamt: ${eur(summe(zahl, x => x.betrag))} + Trinkgeld ${eur(summe(zahl, x => x.tipS))}\nUmsatz Leistungen und Waren: ${eur(saunaU)}\n\nTrinkgeld je Empfänger:\n` +
+    ([...new Set(tv.map(x => x.an))].map(e => `  ${empfName(e)}: ${eur(summe(tv.filter(x => x.an === e), x => x.betrag))}`).join('\n') || '  keins') +
+    `\n\nMassagen – Miete ${MIETE_PROZENT} % vom Preis (ohne Trinkgeld):\n` +
+    (mieteJe.map(x => `  ${name('mas', x.m)}: ${x.anz} Massage(n), ${eur(x.preis)} → Miete ${eur(x.miete)}`).join('\n') || '  keine') +
+    `\nIn Rechnung zu stellen: ${eur(mieteU)}\n`;
 }
 function masseurAbrechnung(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
@@ -729,61 +747,48 @@ function masseurAbrechnung(sch, mid) {
 
 function abrechnung(sch) {
   // Übernommene Buchungen/Zahlungen sind schon in der Schicht abgerechnet, aus der sie kommen.
-  const buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen).map(b => ({ ...b, s }))), zahl = sch.flatMap(s => s.zahl.filter(z => !z.uebernommen).map(z => ({ ...z, s })));
+  const d = saunaDaten(sch), { summe, sbu, zahl, tv, mids, mieteJe, saunaU, mieteU } = d;
   const kopf = sch.map(s => `${schName(s.nr)} (${esc(name('ma', s.ma))}${s.zu ? '' : ', noch offen'})`).join(' · ');
-  const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
-  // Zahlungen nach Art
   const arten = [...new Set(zahl.map(z => z.art))];
   const mas_ = [...new Set(sch.map(s => s.ma))].map(i => kontakt('ma', i));
-  // Die Miete steht ganz oben, damit sie auch im Ausdruck als Erstes ins Auge fällt (nur die Miete, ohne weitere Aufschlüsselung).
-  const mietBu = buch.filter(b => b.masseur), mietGes = summe(mietBu, miete);
-  const mietJe = [...new Set(mietBu.map(b => b.masseur))].map(m => `${esc(name('mas', m))} ${eur(summe(mietBu.filter(b => b.masseur === m), miete))}`).join(' · ');
-  let h = `<div class="card"><h2>Abrechnung ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
-  <div class="mieteoben"><b>Miete Massagen (${MIETE_PROZENT} %): ${eur(mietGes)}</b>${mietJe ? ` <span class="mut">· ${mietJe}</span>` : ''}</div>
-  <div class="row">${mailKnopf('Mitarbeiter*innen', mas_.map(m => m.email), 'Abrechnung ' + datumDe(sch[0].datum), gesamtText(sch))}</div>
+  // Die Miete steht auch ganz oben, damit sie im Ausdruck als Erstes ins Auge fällt.
+  const mietJe = mieteJe.map(x => `${esc(name('mas', x.m))} ${eur(x.miete)}`).join(' · ');
+  const alt = zahl.some(z => !z.kat && !z.extra);
+  let h = `<div class="card"><h2>Abrechnung Sauna ${datumDe(sch[0].datum)}</h2><div class="mut">${kopf}</div>
+  <div class="mieteoben"><b>Miete Massagen (${MIETE_PROZENT} %): ${eur(mieteU)}</b>${mietJe ? ` <span class="mut">· ${mietJe}</span>` : ''}</div>
+  <div class="row">${mailKnopf('Mitarbeiter*innen', mas_.map(m => m.email), 'Abrechnung Sauna ' + datumDe(sch[0].datum), gesamtText(sch))}</div>
   <h3>Einnahmen nach Zahlungsart</h3><table><tr><th>Art</th><th class="r">Rechnung</th><th class="r">Trinkgeld</th><th class="r">Eingenommen</th></tr>
-  ${arten.map(a => { const z = zahl.filter(x => x.art === a); const b = summe(z, x => x.betrag), t = summe(z, x => x.tip); return `<tr><td>${esc(a)}</td><td class="r">${eur(b)}</td><td class="r">${eur(t)}</td><td class="r">${eur(b + t)}</td></tr>`; }).join('')}
-  <tr><th>Gesamt</th><th class="r">${eur(summe(zahl, x => x.betrag))}</th><th class="r">${eur(summe(zahl, x => x.tip))}</th><th class="r">${eur(summe(zahl, x => x.betrag + x.tip))}</th></tr></table></div>`;
+  ${arten.map(a => { const z = zahl.filter(x => x.art === a); const b = summe(z, x => x.betrag), t = summe(z, x => x.tipS); return `<tr><td>${esc(a)}</td><td class="r">${eur(b)}</td><td class="r">${eur(t)}</td><td class="r">${eur(b + t)}</td></tr>`; }).join('')}
+  <tr><th>Gesamt</th><th class="r">${eur(summe(zahl, x => x.betrag))}</th><th class="r">${eur(summe(zahl, x => x.tipS))}</th><th class="r">${eur(summe(zahl, x => x.betrag + x.tipS))}</th></tr></table>
+  ${alt ? '<div class="mut" style="margin-top:6px">Enthält früher gebuchte Zahlungen ohne Zuordnung zu Sauna oder Massage.</div>' : ''}</div>`;
 
-  // Saunaeinnahmen: Leistungen und Waren der Sauna plus für jede Massage die Miete (30 % des Preises, ohne Trinkgeld)
-  const sposn = {}, sbu = buch.filter(b => !b.masseur), mbu = buch.filter(b => b.masseur);
-  sbu.forEach(b => { (sposn[b.name] = sposn[b.name] || { m: 0, u: 0 }); sposn[b.name].m += b.menge; sposn[b.name].u += b.menge * b.preis; });
-  const mpos = {};
-  mbu.forEach(b => { const k = b.name + '|' + b.masseur; (mpos[k] = mpos[k] || { n: b.name, mas: b.masseur, m: 0, u: 0, mi: 0 }); mpos[k].m += b.menge; mpos[k].u += b.menge * b.preis; mpos[k].mi += miete(b); });
-  const saunaU = summe(sbu, b => b.menge * b.preis), mieteU = summe(mbu, miete);
-  h += `<div class="card"><h3>Saunaeinnahmen</h3><table><tr><th>Position</th><th class="r">Menge</th><th class="r">Preis</th><th class="r">Einnahme</th></tr>
-  ${Object.entries(sposn).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="4">Keine Leistungen oder Waren.</td></tr>'}
-  <tr><th colspan="3">Leistungen und Waren</th><th class="r">${eur(saunaU)}</th></tr>
-  ${Object.values(mpos).map(v => `<tr><td>Miete ${MIETE_PROZENT} % · ${esc(v.n)} <span class="mut">(${esc(name('mas', v.mas))})</span></td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td><td class="r">${eur(v.mi)}</td></tr>`).join('') || '<tr><td class="mut" colspan="4">Keine Massagen, keine Miete.</td></tr>'}
-  <tr><th colspan="3">Miete Massagen</th><th class="r">${eur(mieteU)}</th></tr>
-  <tr><th colspan="3">Saunaeinnahmen gesamt</th><th class="r">${eur(saunaU + mieteU)}</th></tr></table>
-  <div class="mut" style="margin-top:6px">Die Masseure verkaufen die Massagen selbst; die Miete (${MIETE_PROZENT} % des Preises, ohne Trinkgeld) zahlen sie später per Rechnung.</div></div>`;
-
-  // Umsatz je Position
+  // Umsatz je Position – ohne Massagen
   const pos = {};
-  buch.forEach(b => { const k = b.name; (pos[k] = pos[k] || { m: 0, u: 0 }); pos[k].m += b.menge; pos[k].u += b.menge * b.preis; });
+  sbu.forEach(b => { const k = b.name; (pos[k] = pos[k] || { m: 0, u: 0 }); pos[k].m += b.menge; pos[k].u += b.menge * b.preis; });
   h += `<div class="card"><h3>Umsatz je Leistung / Ware</h3><table><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>
-  ${Object.entries(pos).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('')}
-  <tr><th>Gesamt</th><th></th><th class="r">${eur(summe(buch, b => b.menge * b.preis))}</th></tr></table></div>`;
+  ${Object.entries(pos).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="3">Keine Leistungen oder Waren.</td></tr>'}
+  <tr><th>Gesamt</th><th></th><th class="r">${eur(saunaU)}</th></tr></table></div>`;
 
-  // Massagen je Masseur
-  const mb = buch.filter(b => b.masseur);
-  const mids = [...new Set(mb.map(b => b.masseur))];
-  h += `<div class="card"><h3>Massagen je Masseur</h3>` + (mids.length ? `<table><tr><th>Masseur</th><th>Massage</th><th class="r">Anzahl</th><th class="r">Umsatz</th></tr>` +
-    mids.map(m => {
-      const x = mb.filter(b => b.masseur === m), ns = [...new Set(x.map(b => b.name))];
-      return ns.map((n, i) => { const y = x.filter(b => b.name === n); return `<tr><td>${i ? '' : esc(name('mas', m))}</td><td>${esc(n)}</td><td class="r">${summe(y, b => b.menge)}</td><td class="r">${eur(summe(y, b => b.menge * b.preis))}</td></tr>`; }).join('') +
-        `<tr><td></td><th>Summe ${esc(name('mas', m))}</th><th class="r">${summe(x, b => b.menge)}</th><th class="r">${eur(summe(x, b => b.menge * b.preis))}</th></tr>`;
-    }).join('') + `</table>` : '<span class="mut">Keine Massagen.</span>') + `</div>`;
-
-  // Trinkgeld je Empfänger
-  const tv = zahl.flatMap(z => tipVerteilung(z.s, z)), te = [...new Set(tv.map(x => x.an))];
+  // Trinkgeld je Empfänger – ohne das der Masseure
+  const te = [...new Set(tv.map(x => x.an))];
   h += `<div class="card"><h3>Trinkgeld je Empfänger</h3>` + (te.length ? `<table>${te.map(e => `<tr><td>${esc(empfName(e))}</td><td class="r">${eur(summe(tv.filter(x => x.an === e), x => x.betrag))}</td></tr>`).join('')}</table>` : '<span class="mut">Kein Trinkgeld.</span>') + `</div>`;
 
-  // Kunden-Detail + offene Beträge
+  // Kunden-Detail + offene Beträge (nur Sauna)
   h += `<div class="card"><h3>Kunden (Schlüssel)</h3><table><tr><th>Schlüssel</th><th>Schicht</th><th>Zeit</th><th class="r">Gebucht</th><th class="r">Bezahlt</th><th class="r">Trinkgeld</th><th class="r">Offen</th></tr>
-  ${sch.flatMap(s => s.gaeste.map(x => { const t = { ...gastSumme(s, x.id, true), offen: gastSumme(s, x.id).offen }; return `<tr><td>${esc(kundeText(x))}${x.von ? ' <span class="mut">(übernommen)</span>' : ''}</td><td>${schName(s.nr)}</td><td>${x.an || ''}${x.ab ? '–' + x.ab : ''}</td><td class="r">${eur(t.soll)}</td><td class="r">${eur(t.bez)}</td><td class="r">${eur(t.tip)}</td><td class="r ${t.offen ? 'warn' : ''}">${eur(t.offen)}</td></tr>`; })).join('')}</table>
-  <div class="mut" style="margin-top:6px">Offene Beträge oben rot markiert – sie sind noch nicht bezahlt.</div></div>`;
+  ${sch.flatMap(s => s.gaeste.map(x => {
+    const bu = s.buch.filter(b => b.gast === x.id && !b.masseur && !b.uebernommen), za = zahl.filter(z => z.s.id === s.id && z.gast === x.id), off = offenKat(s, x.id).sauna;
+    return `<tr><td>${esc(kundeText(x))}${x.von ? ' <span class="mut">(übernommen)</span>' : ''}</td><td>${schName(s.nr)}</td><td>${x.an || ''}${x.ab ? '–' + x.ab : ''}</td><td class="r">${eur(summe(bu, b => b.menge * b.preis))}</td><td class="r">${eur(summe(za, z => z.betrag))}</td><td class="r">${eur(summe(za, z => z.tipS))}</td><td class="r ${off ? 'warn' : ''}">${eur(off)}</td></tr>`;
+  })).join('')}</table>
+  <div class="mut" style="margin-top:6px">Offene Beträge oben rot markiert – sie sind noch nicht bezahlt. Die Massagen stehen in der Abrechnung Massage.</div></div>`;
+
+  // Unten: die Massagen mit der Miete, die in Rechnung zu stellen ist
+  h += `<div class="card"><h3>Massagen – Miete (${MIETE_PROZENT} % vom Preis, ohne Trinkgeld)</h3>` + (mids.length ? `<table><tr><th>Masseur</th><th>Massage</th><th class="r">Anzahl</th><th class="r">Preis</th><th class="r">Miete</th></tr>` +
+    mieteJe.map(x => {
+      const ns = [...new Set(x.bu.map(b => b.name))];
+      return ns.map((n, i) => { const y = x.bu.filter(b => b.name === n); return `<tr><td>${i ? '' : esc(name('mas', x.m))}</td><td>${esc(n)}</td><td class="r">${summe(y, b => b.menge)}</td><td class="r">${eur(summe(y, b => b.menge * b.preis))}</td><td class="r">${eur(summe(y, miete))}</td></tr>`; }).join('') +
+        `<tr><td></td><th>Summe ${esc(name('mas', x.m))}</th><th class="r">${x.anz}</th><th class="r">${eur(x.preis)}</th><th class="r">${eur(x.miete)}</th></tr>`;
+    }).join('') + `<tr><th colspan="4">In Rechnung zu stellen:</th><th class="r">${eur(mieteU)}</th></tr></table>` : '<span class="mut">Keine Massagen, keine Miete.</span>') +
+    `<div class="mut" style="margin-top:6px">Die Masseure verkaufen die Massagen selbst; die Miete wird ihnen später per Rechnung berechnet.</div></div>`;
   return h;
 }
 
