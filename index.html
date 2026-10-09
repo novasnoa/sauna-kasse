@@ -565,8 +565,10 @@ function vGast(s, k) {
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
   <div class="zwei"><div>
-  <h3>Leistungen</h3><div class="grid">${aktive('lei').map(l =>
-    `<button class="${l.massage ? 'mass' : ''}" data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}${l.massage ? ' · Massage' : ''}</small></button>`).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div>
+  <h3>Leistungen</h3><div class="grid">${aktive('lei').filter(l => !l.massage).map(l =>
+    `<button data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div>
+  <h3>Massagen</h3><div class="grid">${aktive('lei').filter(l => l.massage).map(l =>
+    `<button class="mass" data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div>
   <h3>Waren</h3><div class="grid">${aktive('war').map(l =>
     `<button data-act="buche" data-k="war" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div>
   </div><div>
