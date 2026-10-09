@@ -184,7 +184,9 @@ function gLeiste() {
   const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
   const aktiv = off.reduce((n, x) => n + x.gaeste.filter(g => g.da).length, 0);
   const cur = s.gaeste.find(x => x.id === U.gast);
-  const chip = x => `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}">🔑 ${esc(kundeText(x))}</button>`;
+  // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
+  const chip = x => { const t = gastSumme(s, x.id);
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   let h = `<button class="${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">🔑 ${cur ? esc(kundeText(cur)) : 'Kein Gast'} ▾</button>
     <span class="anz">${aktiv} aktiv</span>
     <button data-act="neuGastTop">➕ Neuer Gast</button>
@@ -432,27 +434,23 @@ function vForm(s) {
   <div class="row"><button class="ok" data-act="${wech ? 'wechselOk' : 'bearbOk'}">${wech ? `Wechseln und ${anw} Gäste übernehmen` : 'Speichern'}</button><button data-act="formAb">Abbrechen</button></div></div>`;
 }
 function vSchicht(s) {
-  const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
+  // Anwesende, Gegangene und „Neuer Gast“ stehen in der Gästeleiste im Kopf (gLeiste); hier bleibt nur die Auswahl der
+  // freien Schlüssel, die der Knopf dort aufklappt.
+  const da = s.gaeste.filter(x => x.da);
   const g = (s.gaeste.find(x => x.id === U.gast) || da[0] || s.gaeste[0] || {}).id || null;
   U.gast = g;
-  const chip = x => { const t = gastSumme(s, x.id);
-    return `<button class="chip ${x.id === g ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gast" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   const frei = aktive('kun').filter(k => !belegt(k.id));
   let h = (U.form ? vForm(s) : '') + `<div class="card"><div class="row"><b>${datumDe(s.datum)} · ${schName(s.nr)}</b>
     <span class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</span>
     <span style="flex:1"></span><button data-act="bearbForm">Schicht bearbeiten</button>
     ${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button></div>
-    <div class="mut">Anwesend (${da.length}):</div>
-    <div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div>
-    ${weg.length ? `<details><summary class="mut">Gegangen (${weg.length})</summary><div class="row">${weg.map(chip).join('')}</div></details>` : ''}
     ${U.neu ? `<div class="mut" style="margin-top:8px">Neuen Gast eintragen – freien Schlüssel antippen:</div>
     <div class="row"><input id="g-name" placeholder="Name (freiwillig, vorher eintragen)" size="26"></div>
     <div class="row">${frei.map(k => `<button class="chip key" data-act="gastFrei" data-v="${k.id}">🔑 ${esc(k.nummer)}</button>`).join('') || '<span class="mut">Keine freien Schlüssel angelegt.</span>'}</div>
     <details><summary class="mut" style="min-height:44px;display:flex;align-items:center">Andere Nummer eingeben</summary>
     <div class="row"><input id="g-nr" placeholder="Schlüsselnummer" size="12">
     <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></details>
-    <div class="row"><button data-act="neuAb">Abbrechen</button></div>`
-    : '<div class="row" style="margin-top:8px"><button class="p" data-act="neuGast">➕ Neuer Gast</button></div>'}</div>`;
+    <div class="row"><button data-act="neuAb">Abbrechen</button></div>` : ''}</div>`;
   if (g) h += vGast(s, g);
   const tot = s.gaeste.reduce((a, x) => { const t = gastSumme(s, x.id, true); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
   h += `<div class="card sum"><span>Schicht gesamt: ${eur(tot.soll)}</span><span>bezahlt: ${eur(tot.bez)}</span><span>Trinkgeld: ${eur(tot.tip)}</span></div>`;
