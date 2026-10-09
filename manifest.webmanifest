@@ -1,6 +1,6 @@
 {
-  "name": "Sauna-Kasse",
-  "short_name": "Kasse",
+  "name": "Olivin",
+  "short_name": "Olivin",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
