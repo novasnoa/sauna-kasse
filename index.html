@@ -82,7 +82,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Bar', tipAn: 'auto', edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Bar', tipAn: 'auto', neu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -417,12 +417,14 @@ function vSchicht(s) {
     <div class="mut">Anwesend (${da.length}):</div>
     <div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div>
     ${weg.length ? `<details><summary class="mut">Gegangen (${weg.length})</summary><div class="row">${weg.map(chip).join('')}</div></details>` : ''}
-    <div class="mut" style="margin-top:8px">Neuen Gast eintragen – freien Schlüssel antippen:</div>
+    ${U.neu ? `<div class="mut" style="margin-top:8px">Neuen Gast eintragen – freien Schlüssel antippen:</div>
     <div class="row"><input id="g-name" placeholder="Name (freiwillig, vorher eintragen)" size="26"></div>
     <div class="row">${frei.map(k => `<button class="chip key" data-act="gastFrei" data-v="${k.id}">🔑 ${esc(k.nummer)}</button>`).join('') || '<span class="mut">Keine freien Schlüssel angelegt.</span>'}</div>
     <details><summary class="mut" style="min-height:44px;display:flex;align-items:center">Andere Nummer eingeben</summary>
     <div class="row"><input id="g-nr" placeholder="Schlüsselnummer" size="12">
-    <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></details></div>`;
+    <button class="p" data-act="gastNeu">Kunde hinzufügen</button></div></details>
+    <div class="row"><button data-act="neuAb">Abbrechen</button></div>`
+    : '<div class="row" style="margin-top:8px"><button class="p" data-act="neuGast">➕ Neuer Gast</button></div>'}</div>`;
   if (g) h += vGast(s, g);
   const tot = s.gaeste.reduce((a, x) => { const t = gastSumme(s, x.id, true); return { soll: a.soll + t.soll, bez: a.bez + t.bez, tip: a.tip + t.tip }; }, { soll: 0, bez: 0, tip: 0 });
   h += `<div class="card sum"><span>Schicht gesamt: ${eur(tot.soll)}</span><span>bezahlt: ${eur(tot.bez)}</span><span>Trinkgeld: ${eur(tot.tip)}</span></div>`;
@@ -651,7 +653,7 @@ function gastAufnehmen(s, k) {
   const b = belegt(k.id);
   if (b) return alert(`Schlüssel ${k.nummer} ist noch vergeben (${schName(b.s.nr)}). Erst bei dem Gast „Gast geht“ drücken.`);
   const g = { id: id(), kun: k.id, name: $v('g-name').trim(), da: true, an: uhr(), ts: Date.now(), ab: '' };
-  s.gaeste.push(g); U.gast = g.id;
+  s.gaeste.push(g); U.gast = g.id; U.neu = false;
 }
 const A = {
   tab: v => { U.tab = v; },
@@ -669,7 +671,10 @@ const A = {
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Text kopiert – jetzt in eine Mail einfügen.'), () => prompt('Zum Kopieren Strg+C drücken:', t));
     return false;
   },
-  schicht: v => { U.sch = v; U.gast = null; U.form = null; },
+  schicht: v => { U.sch = v; U.gast = null; U.form = null; U.neu = false; },
+  // Die freien Schlüssel stehen nicht mehr dauerhaft auf der Startseite, sondern erst nach „Neuer Gast“.
+  neuGast: () => { U.neu = true; },
+  neuAb: () => { U.neu = false; },
   gast: v => { U.gast = v; },
   masWahl: v => { U.mas = v; behalte(); },
   artWahl: v => { U.art = v; behalte(); },
