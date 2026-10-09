@@ -29,7 +29,6 @@ header button.lnk.on{background:transparent;color:#fff;font-weight:700}
 #nav{display:flex;gap:4px;flex-wrap:wrap}
 #re{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* Langer Name darf die Zeile nicht sprengen: abschneiden, die ganze Zeile steht in der Liste darunter. */
-header button.plus{min-width:56px;font-size:26px;font-weight:700}
 main{max-width:1280px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-right)) 80px max(16px,env(safe-area-inset-left))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}
 h2{font-size:17px;margin:0 0 8px}h3{font-size:15px;margin:12px 0 4px}
@@ -71,11 +70,11 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
 .sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
 #gl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-/* Alle Elemente der Leiste im Kopf haben dieselbe Form: gleich hoch, gleich rund, gleiche Schrift. Die Zahl „N aktiv“
-   ist kein Knopf und bleibt deshalb weiß ausgefüllt – nur Farbe und Gewicht unterscheiden sie. */
+/* Alle Elemente der Leiste im Kopf haben dieselbe Form: gleich hoch, gleich rund, gleiche Schrift. Die drei Schalter
+   „N aktiv“, „N gegangen“ und „＋ neu“ sind außerdem gleich breit; der Schichten-Schalter folgt mit etwas Abstand. */
 #gl > :not(#pop){display:inline-block;box-sizing:border-box;height:44px;min-height:44px;line-height:42px;padding:0 16px;margin:0;border-radius:22px;font-size:16px;white-space:nowrap}
-#gl .anz{background:#fff;color:var(--acc);font-weight:700;border:1px solid #fff}
-#gl > .plus{font-size:24px;font-weight:700;min-width:56px;text-align:center}
+#gl > :not(#pop).g3{width:132px;padding:0;text-align:center}
+#gl > :not(#pop).sch{margin-left:14px}   /* etwas Abstand zwischen den drei Schaltern und der Schichtenanzeige */
 #pop{position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
 #pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
@@ -90,6 +89,7 @@ button.k4.mt{cursor:pointer;font-weight:600}
   #gl,#re,#nav{flex-wrap:nowrap;gap:6px}
   #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
   #gl > :not(#pop){padding:0 14px}
+  #gl > :not(#pop).g3{padding:0}
 }
 .modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto}
 .modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
@@ -223,25 +223,28 @@ function gLeiste() {
   const s = schicht();
   if (!s) return `<button class="on" data-act="oeffnenForm">Schicht öffnen</button>`;
   const off = offeneSchichten();
-  const weg = s.gaeste.filter(x => !x.da);
   const aktiv = off.reduce((n, x) => n + x.gaeste.filter(g => g.da).length, 0);
+  const weg = off.reduce((n, x) => n + x.gaeste.filter(g => !g.da).length, 0);
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
     return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
-  let h = `<button class="anz" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
-    <button class="plus" data-act="neuGastTop" title="Neuer Gast" aria-label="Neuer Gast">+</button>
-    <button class="${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">Gegangen (${weg.length}) ▾</button>
-    <button class="${U.pop === 'sch' ? 'on' : ''}" data-act="pop" data-v="sch">${schName(s.nr)} ▾</button>`;
+  // Drei gleich große Schalter (g3), dann mit etwas Abstand der Schichten-Schalter (sch).
+  let h = `<button class="g3 ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
+    <button class="g3 ${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">${weg} gegangen ▾</button>
+    <button class="g3" data-act="neuGastTop" title="Neuen Gast anlegen">＋ neu</button>
+    <button class="sch ${U.pop === 'sch' ? 'on' : ''}" data-act="pop" data-v="sch">${schName(s.nr)} ▾</button>`;
   // Der Schichten-Schalter ist der einzige Weg, die Schicht zu wählen, zu bearbeiten, zu wechseln oder zu schließen.
   if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schicht wählen:</div>
     <div class="row">${off.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schTop" data-v="${x.id}">${datumDe(x.datum)} · ${schName(x.nr)}</button>`).join('')}</div>
     <div class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</div>
     <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button><button data-act="oeffnenForm">＋ Neue Schicht</button></div></div>`;
-  if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${aktiv}) – Gast wählen:</div>` + off.map(x => {
-    const da = x.gaeste.filter(g => g.da);
-    return (off.length > 1 ? `<div class="mut">${schName(x.nr)} ${datumDe(x.datum)}</div>` : '') + `<div class="row">${da.map(g => chip(g, x)).join('') || '<span class="mut">Niemand.</span>'}</div>`;
+  // Listen der Anwesenden bzw. Gegangenen über alle offenen Schichten, damit Zahl und Liste zusammenpassen.
+  const liste = (da, titel, leer) => `<div id="pop"><div class="mut">${titel}</div>` + off.map(x => {
+    const gs = x.gaeste.filter(g => !!g.da === da);
+    return (off.length > 1 ? `<div class="mut">${schName(x.nr)} ${datumDe(x.datum)}</div>` : '') + `<div class="row">${gs.map(g => chip(g, x)).join('') || `<span class="mut">${leer}</span>`}</div>`;
   }).join('') + `</div>`;
-  if (U.pop === 'weg') h += `<div id="pop"><div class="mut">Gegangene Gäste (${weg.length}):</div><div class="row">${weg.map(x => chip(x, s)).join('') || '<span class="mut">Noch niemand gegangen.</span>'}</div></div>`;
+  if (U.pop === 'gast') h += liste(true, `Anwesend (${aktiv}) – Gast wählen:`, 'Niemand.');
+  if (U.pop === 'weg') h += liste(false, `Gegangene Gäste (${weg}):`, 'Noch niemand gegangen.');
   return h;
 }
 
