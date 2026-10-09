@@ -185,7 +185,7 @@ setInterval(markiere, 30000);
    liest die Dateien der anderen. So gibt es nie zwei Schreiber auf einer Datei und damit keine Überschreib-Unfälle.
    Zusammengeführt wird je Datensatz (Id): der zuletzt geänderte gewinnt, neue Sätze kommen dazu, Gelöschtes
    steht als Vermerk in S.tot. Die Geräteuhren sollten ungefähr stimmen (automatische Zeit am iPad ist Standard). */
-const GOOGLE_CLIENT_ID = '';   // Wenn hier eingetragen, entfällt die Eingabe auf jedem Gerät.
+const GOOGLE_CLIENT_ID = '710064191222-nt56kg78p26guueu0is853evlqg9vl2a.apps.googleusercontent.com';   // Öffentlich, kein Geheimnis; das Client-Secret wird nicht gebraucht.
 const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
