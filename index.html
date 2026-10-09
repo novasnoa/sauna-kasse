@@ -109,7 +109,7 @@ let S = laden();
 // UI-Zustand, wird nicht gespeichert
 // Der Eintritt gilt 4 Stunden; danach wird der Schlüssel rot und der Gast muss nachzahlen.
 const LIMIT_MS = 4 * 3600 * 1000;
-const U = { art: 'Bar', extra: false, extraAn: '', neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { art: 'Karte', extra: false, extraAn: '', neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -515,8 +515,8 @@ function vGast(s, k) {
   <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
   <h3>Zahlung</h3>
   <div class="row"><input id="p-betrag" size="9" inputmode="decimal" placeholder="Betrag €" value="${t.offen > 0 ? (t.offen / 100).toFixed(2).replace('.', ',') : ''}">
+    <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div>
     ${t.offen > 0 ? `<button data-act="restSetzen" data-v="${t.offen}">Rest ${eur(t.offen)}</button>` : ''}</div>
-  <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div>
   <h3>Trinkgeld</h3>
   <div class="row tip"><input id="p-tip" size="9" inputmode="decimal" placeholder="Trinkgeld €">
     ${[5, 10, 15].map(c => `<button data-act="tipProz" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer">Kein</button></div>
@@ -527,8 +527,8 @@ function vGast(s, k) {
   ${U.extra ? `<div class="card" style="border:2px solid var(--acc);margin-top:0">
     <div class="mut">Extra Trinkgeld geht an:</div>
     <div class="seg">${extra.map(([v, l]) => `<button class="${v === U.extraAn ? 'on' : ''}" data-act="extraAn" data-v="${v}">${esc(l)}</button>`).join('')}</div>
-    <div class="row"><input id="x-betrag" size="9" inputmode="decimal" placeholder="Summe €"></div>
-    <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div>
+    <div class="row"><input id="x-betrag" size="9" inputmode="decimal" placeholder="Summe €">
+    <div class="seg">${['Bar', 'Karte', 'Sonstiges'].map(a => `<button class="${a === U.art ? 'on' : ''}" data-act="artWahl" data-v="${a}">${a}</button>`).join('')}</div></div>
     <div class="row"><button class="ok" style="min-height:56px" data-act="extraBuchen">Extra Trinkgeld buchen</button></div></div>` : ''}
   </div></div></div>`;
 }
