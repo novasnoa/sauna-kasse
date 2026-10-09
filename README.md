@@ -11,6 +11,8 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Mehrere Teilzahlungen (Bar/Karte/Sonstiges); zwei Zahlblöcke je Gast: „Sauna buchen“ (Trinkgeld an den Mitarbeiter an der Kasse) und „Massage buchen“ (Trinkgeld an den gewählten Masseur, der die Massage selbst verkauft); dazu „Sonstiges Trinkgeld“ (Popup: Betrag, gleichmäßig auf angewählte Mitarbeiter und Masseure verteilt)
 - Getrennte Abrechnung je Masseur (Massagen + Trinkgeld-Anteil, mit Unterschriftszeile)
 - Abrechnungen per E-Mail (mailto:) an die hinterlegten Adressen: Gesamtabrechnung an die Kasse, Masseur-Abrechnung an den Masseur
+- Miete: Für jede Massage zählen 30 % des Preises (ohne Trinkgeld) als Saunaeinnahme. In der Gesamtabrechnung steht sie bei den Saunaeinnahmen,
+  in der Masseur-Abrechnung als Vermerk unter der Summe (wird später per Rechnung bezahlt, nicht abgezogen); der Satz steht in `MIETE_PROZENT`
 - Abrechnung je Schicht oder Tag zum Drucken (Zahlungsarten, Umsatz, Masseure, Trinkgeld, offene Beträge)
 
 Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelmäßig herunterladen.
