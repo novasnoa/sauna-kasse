@@ -23,6 +23,14 @@ header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:
 header h1{font-size:18px;margin:0 16px 0 0}
 header button{background:transparent;color:#fff;border:1px solid #ffffff80;padding:10px 18px;border-radius:8px;font-size:17px}
 header button.on{background:#fff;color:var(--acc)}
+header h1{cursor:pointer;user-select:none;-webkit-user-select:none}
+header button.lnk{border:none;text-decoration:underline;padding:10px 8px}
+header button.lnk.on{background:transparent;color:#fff;font-weight:700}
+#nav{display:flex;gap:4px;flex-wrap:wrap}
+#re{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* Langer Name darf die Zeile nicht sprengen: abschneiden, die ganze Zeile steht in der Liste darunter. */
+header button.cur{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header button.plus{min-width:56px;font-size:26px;font-weight:700;line-height:1;padding:8px 14px}
 main{max-width:1280px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-right)) 80px max(16px,env(safe-area-inset-left))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}
 h2{font-size:17px;margin:0 0 8px}h3{font-size:15px;margin:12px 0 4px}
@@ -61,6 +69,18 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
 #pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 #pop button.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
+/* Querformat (Tablet): alles in einer Zeile – etwas engere Knöpfe, damit Olivin, Gästeleiste und Verweise nebeneinander
+   passen. Steht bewusst NACH den Grundregeln von #gl, #re und #nav: gleiche Gewichtung, die spätere gewinnt. */
+@media(min-width:980px){
+  header{flex-wrap:nowrap;gap:6px}
+  header h1{margin-right:8px}
+  header button{padding:10px 12px;font-size:16px;white-space:nowrap;flex:0 0 auto}
+  header button.lnk{padding:10px 8px}
+  header button.cur{flex:0 1 auto;min-width:0}
+  #gl,#re,#nav{flex-wrap:nowrap;gap:6px}
+  #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
+  #gl .anz{padding:10px 12px;font-size:16px;white-space:nowrap}
+}
 .noprint{}
 .printonly{display:none}
 @media print{
@@ -73,10 +93,10 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 </head>
 <body>
 <header class="noprint">
-  <h1>Sauna-Kasse</h1>
-  <span id="nav"></span>
+  <h1 data-act="tab" data-v="kasse" title="Zur Kasse">Olivin</h1>
   <span id="gl"></span>
-  <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+  <span id="re">
+  <span id="nav"></span>
   <button id="wolke" hidden class="noprint"></button>
   <span id="netz" hidden style="background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span></span>
 </header>
@@ -166,8 +186,9 @@ function gastSumme(s, k, neu) {
 
 /* ---------- Anzeige ---------- */
 function render() {
-  $('nav').innerHTML = [['kasse', 'Kasse'], ['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
-    .map(([t, l]) => `<button class="${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
+  // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
+  $('nav').innerHTML = [['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
+    .map(([t, l]) => `<button class="lnk ${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
   $('gl').innerHTML = gLeiste();
   const keep = U.keep; U.keep = null;
   $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
@@ -187,9 +208,9 @@ function gLeiste() {
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = x => { const t = gastSumme(s, x.id);
     return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
-  let h = `<button class="${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">🔑 ${cur ? esc(kundeText(cur)) : 'Kein Gast'} ▾</button>
+  let h = `<button class="cur ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">🔑 ${cur ? esc(kundeText(cur)) : 'Kein Gast'} ▾</button>
     <span class="anz">${aktiv} aktiv</span>
-    <button data-act="neuGastTop">➕ Neuer Gast</button>
+    <button class="plus" data-act="neuGastTop" title="Neuer Gast" aria-label="Neuer Gast">+</button>
     <button class="${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">Gegangen (${weg.length}) ▾</button>
     ${off.length > 1 ? `<button data-act="schTop" data-v="${(off.find(x => x.id !== s.id) || s).id}">${schName(s.nr)} ⇄</button>` : `<span class="anz">${schName(s.nr)}</span>`}`;
   if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${da.length}) – Gast wählen:</div><div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div></div>`;
