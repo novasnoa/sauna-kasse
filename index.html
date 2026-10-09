@@ -80,7 +80,14 @@ button.k4.mt{cursor:pointer;font-weight:600}
 /* Alle Elemente der Leiste im Kopf haben dieselbe Form: gleich hoch, gleich rund, gleiche Schrift. Die drei Schalter
    „N aktiv“, „N gegangen“ und „＋ neu“ sind außerdem gleich breit; der Schichten-Schalter folgt mit etwas Abstand. */
 #gl > :not(#pop){display:inline-block;box-sizing:border-box;height:44px;min-height:44px;line-height:42px;padding:0 16px;margin:0;border-radius:22px;font-size:16px;white-space:nowrap}
-#gl > :not(#pop).g3{width:132px;padding:0;text-align:center}
+#gl > :not(#pop).gruppe{display:inline-flex;align-items:center;padding:0;overflow:hidden;line-height:normal;border:1px solid #ffffff80}
+#gl .gtitel{padding:0 12px 0 14px;font-size:15px;font-weight:600;opacity:.9;white-space:nowrap}
+#gl .gruppe > button{box-sizing:border-box;height:42px;min-height:42px;padding:0 10px;margin:0;border:none;border-left:1px solid #ffffff59;border-radius:0;font-size:16px;line-height:1;white-space:nowrap;color:#fff}
+/* Drei leise Farbtöne auf dem braunen Kopf: aktiv grünlich, gegangen gedämpft, neu hell-warm. Geöffnet wird der Knopf weiß. */
+#gl .gruppe > .g-aktiv{background:rgba(47,125,79,.55)}
+#gl .gruppe > .g-weg{background:rgba(255,255,255,.10)}
+#gl .gruppe > .g-neu{background:rgba(255,214,150,.30)}
+#gl .gruppe > button.on{background:#fff;color:var(--acc)}
 #gl > :not(#pop).sch{margin-left:14px}   /* etwas Abstand zwischen den drei Schaltern und der Schichtenanzeige */
 #pop{position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
@@ -101,7 +108,8 @@ button.k4.mt{cursor:pointer;font-weight:600}
   #gl,#re,#nav{flex-wrap:nowrap;gap:6px}
   #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
   #gl > :not(#pop){padding:0 14px}
-  #gl > :not(#pop).g3{padding:0}
+  #gl > :not(#pop).gruppe{padding:0}
+  #gl .gruppe > button{width:122px;padding:0}   /* Querformat: alle drei gleich breit; schmal: so breit wie der Text */
 }
 .modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto}
 .modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
@@ -266,10 +274,12 @@ function gLeiste() {
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
     return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? `<span class="rest" data-ts="${x.ts}">⏱ ${uhrText(x.ts)}</span>` : '') : `<span class="umsatz">${eur(t.soll)}</span>`} ${x.da && t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
-  // Drei gleich große Schalter (g3), dann mit etwas Abstand der Schichten-Schalter (sch).
-  let h = `<button class="g3 ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
-    <button class="g3 ${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">${weg} gegangen ▾</button>
-    <button class="g3" data-act="neuGastTop" title="Neuen Gast anlegen">＋ neu</button>
+  // „Gäste“ mit den drei gleich großen Schaltern zu einer Gruppe verbunden (gruppe), jeder in einem eigenen leisen Farbton;
+  // mit etwas Abstand folgt der Schichten-Schalter (sch).
+  let h = `<span class="gruppe"><span class="gtitel">Gäste</span>
+    <button class="g-aktiv ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
+    <button class="g-weg ${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">${weg} gegangen ▾</button>
+    <button class="g-neu" data-act="neuGastTop" title="Neuen Gast anlegen">＋ neu</button></span>
     <button class="sch ${U.pop === 'sch' ? 'on' : ''}" data-act="pop" data-v="sch">${schName(s.nr)} ▾</button>`;
   // Der Schichten-Schalter ist der einzige Weg, die Schicht zu wählen, zu bearbeiten, zu wechseln oder zu schließen.
   if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schicht wählen:</div>
