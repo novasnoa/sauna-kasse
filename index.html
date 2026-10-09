@@ -66,6 +66,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+.k4.timer{font-variant-numeric:tabular-nums;font-weight:600}
+.k4.timer.ueber{background:var(--warn);color:#fff;border-color:var(--warn)}
 .chip.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
 .sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
@@ -222,7 +224,7 @@ function render() {
   const keep = U.keep; U.keep = null;
   $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
-  markiere();
+  markiere(); uhrenAktualisieren();
 }
 
 // Leiste im Kopf (auf jedem Reiter, solange eine Schicht offen ist): „N aktiv“ wählt den Gast (Liste aller Anwesenden
@@ -256,6 +258,22 @@ function gLeiste() {
   if (U.pop === 'weg') h += liste(false, `Gegangene Gäste (${weg}):`, 'Noch niemand gegangen.');
   return h;
 }
+
+// 4-Stunden-Uhr je Gast in der Kopfzeile seiner Karte: läuft von 4:00:00 herunter, danach zählt sie die Überzeit
+// („+0:12:05“, rot) – dann ist die Nachzahlung fällig. Wie markiere() ändert sie nur Text und Klasse, ohne neu zu
+// zeichnen, damit angefangene Eingaben stehen bleiben.
+function uhrText(ts) {
+  const rest = LIMIT_MS - (Date.now() - ts), a = Math.abs(rest), z = n => String(n).padStart(2, '0');
+  const t = `${Math.floor(a / 3600000)}:${z(Math.floor(a / 60000) % 60)}:${z(Math.floor(a / 1000) % 60)}`;
+  return rest > 0 ? t : '+' + t;
+}
+function uhrenAktualisieren() {
+  document.querySelectorAll('.timer[data-ts]').forEach(e => {
+    e.textContent = '⏱ ' + uhrText(+e.dataset.ts);
+    e.classList.toggle('ueber', Date.now() - e.dataset.ts >= LIMIT_MS);
+  });
+}
+setInterval(uhrenAktualisieren, 1000);
 
 // Rot färben ohne neu zu zeichnen, damit angefangene Eingaben nicht verloren gehen.
 function markiere() {
@@ -537,6 +555,7 @@ function vGast(s, k) {
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
   return `<div class="card"><div class="k4row"><span class="k4 ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : ''}">🔑 ${esc(kundeText(go))}</span>
+  ${go.da && go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">⏱ ${uhrText(go.ts)}</span>` : ''}
   ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
