@@ -30,7 +30,7 @@ header button.lnk.on{background:transparent;color:#fff;font-weight:700}
 #re{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* Langer Name darf die Zeile nicht sprengen: abschneiden, die ganze Zeile steht in der Liste darunter. */
 header button.cur{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-header button.plus{min-width:56px;font-size:26px;font-weight:700;line-height:1;padding:8px 14px}
+header button.plus{min-width:56px;font-size:26px;font-weight:700}
 main{max-width:1280px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-right)) 80px max(16px,env(safe-area-inset-left))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}
 h2{font-size:17px;margin:0 0 8px}h3{font-size:15px;margin:12px 0 4px}
@@ -70,7 +70,11 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
 .sum{font-size:17px;display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}
 #gl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-#gl .anz{background:#fff;color:var(--acc);font-weight:700;border-radius:20px;padding:10px 16px;font-size:17px}
+/* Alle Elemente der Leiste im Kopf haben dieselbe Form: gleich hoch, gleich rund, gleiche Schrift. Die Zahl „N aktiv“
+   ist kein Knopf und bleibt deshalb weiß ausgefüllt – nur Farbe und Gewicht unterscheiden sie. */
+#gl > :not(#pop){display:inline-block;box-sizing:border-box;height:44px;min-height:44px;line-height:42px;padding:0 16px;margin:0;border-radius:22px;font-size:16px;white-space:nowrap}
+#gl .anz{background:#fff;color:var(--acc);font-weight:700;border:1px solid #fff}
+#gl > .plus{font-size:24px;font-weight:700;min-width:56px;text-align:center}
 #pop{position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
 #pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
@@ -85,7 +89,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
   header button.cur{flex:0 1 auto;min-width:0}
   #gl,#re,#nav{flex-wrap:nowrap;gap:6px}
   #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
-  #gl .anz{padding:10px 12px;font-size:16px;white-space:nowrap}
+  #gl > :not(#pop){padding:0 14px}
 }
 .modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto}
 .modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
