@@ -1,0 +1,42 @@
+# Warum ein zweiter Workflow: GitHub Pages (pages.yml) bleibt unberührt, bis alle Geräte
+# auf die Firebase-Adresse umgezogen sind. Dieser hier veröffentlicht bei jedem Push auf main
+# zusätzlich nach Firebase Hosting – ohne dass jemand am Rechner `firebase deploy` aufrufen
+# und sich anmelden muss.
+#
+# Warum npx firebase-tools statt einer fertigen Action: eine Fremd-Action bekäme den
+# Dienstkonto-Schlüssel in die Hand. So läuft nur das offizielle Werkzeug, und die Version
+# steht fest, damit ein Update von außen nicht über Nacht das Verhalten ändert.
+#
+# Voraussetzung: im Repo unter Settings → Secrets and variables → Actions das Geheimnis
+# FIREBASE_SERVICE_ACCOUNT (der JSON-Schlüssel des Dienstkontos, siehe ÜBERGABE.md).
+name: Firebase
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: firebase
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Schlüssel bereitstellen
+        env:
+          SCHLUESSEL: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SCHLUESSEL" ]; then
+            echo "Geheimnis FIREBASE_SERVICE_ACCOUNT fehlt – siehe ÜBERGABE.md" >&2
+            exit 1
+          fi
+          printf '%s' "$SCHLUESSEL" > "$RUNNER_TEMP/firebase-schluessel.json"
+      - name: Veröffentlichen
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-schluessel.json
+        run: npx --yes firebase-tools@15.33.0 deploy --only hosting --project sauna-kassensystem --non-interactive
+      - name: Schlüssel entfernen
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-schluessel.json"

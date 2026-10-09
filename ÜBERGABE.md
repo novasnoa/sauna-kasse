@@ -20,6 +20,15 @@ Ziel: Kasse, Daten und Veröffentlichung gehören dem Sauna-Konto, nicht dem Ent
 
 Jede neue Fassung von `index.html` wird mit dem letzten Befehl veröffentlicht.
 
+## Automatisch bei jedem Push (`.github/workflows/firebase.yml`)
+Einmalig einzurichten, danach braucht niemand mehr `firebase login`:
+1. Firebase → Projekteinstellungen → Dienstkonten → „Neuen privaten Schlüssel generieren“ (JSON-Datei).
+   Besser ein eigenes Dienstkonto mit nur der Rolle **Firebase Hosting Admin** (Cloud Console → IAM).
+2. GitHub-Repo → Settings → Secrets and variables → Actions → „New repository secret“:
+   Name `FIREBASE_SERVICE_ACCOUNT`, Wert = der gesamte Inhalt der JSON-Datei.
+3. Die JSON-Datei danach löschen; sie gehört nur noch ins GitHub-Geheimnis.
+Fehlt das Geheimnis, schlägt der Lauf mit einer klaren Meldung fehl; GitHub Pages ist davon unabhängig.
+
 ## Umzug der Daten
 Die Buchungen liegen im Browser (localStorage) **und** – wenn der Google-Abgleich an ist – im App-Ordner des
 Google-Kontos. Unter der neuen Adresse einmal bei Google anmelden: der Stand kommt aus dem Konto zurück.
