@@ -6,6 +6,7 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Stammdaten mit Reitern: Mitarbeiter*innen, Masseur*innen (je mit E-Mail und Telefon), Services, Massagen, Waren, Kunden; Sicherung ganz rechts
 - Bis zu zwei Schichten pro Tag, mehrere gleichzeitig offen
 - Schlüssel werden beim Gehen des Gastes wieder frei und können neu vergeben werden (belegte sind gesperrt)
+- Tablet/Touch: große Bedienflächen, freie Schlüssel per Antippen, Zahlart/Trinkgeld per Tippen, zweispaltig im Querformat
 - Kunden je Schicht, Leistungen/Waren buchen, Massagen dem Masseur zuordnen
 - Mehrere Teilzahlungen (Bar/Karte/Sonstiges); Trinkgeld standardmäßig anteilig nach Massage-Anteil an die Masseure, Rest an die Kasse (oder fester Empfänger)
 - Getrennte Abrechnung je Masseur (Massagen + Trinkgeld-Anteil, mit Unterschriftszeile)
