@@ -29,7 +29,6 @@ header button.lnk.on{background:transparent;color:#fff;font-weight:700}
 #nav{display:flex;gap:4px;flex-wrap:wrap}
 #re{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* Langer Name darf die Zeile nicht sprengen: abschneiden, die ganze Zeile steht in der Liste darunter. */
-header button.cur{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header button.plus{min-width:56px;font-size:26px;font-weight:700}
 main{max-width:1280px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-right)) 80px max(16px,env(safe-area-inset-left))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0}
@@ -65,6 +64,8 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .k4row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 6px}
 .k4{display:inline-flex;align-items:center;min-height:44px;height:44px;padding:0 18px;margin:0;border-radius:22px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:17px;font-weight:600;line-height:1;white-space:nowrap}
 .k4.mt{background:#f5eee6;color:var(--acc);font-weight:500}
+button.k4.mt{cursor:pointer;font-weight:600}
+.k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
 .chip.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
 .nachzahlung{background:#fde8e4;border:2px solid var(--warn);color:var(--warn);font-weight:600;border-radius:8px;padding:8px 12px;margin:8px 0}
@@ -86,7 +87,6 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
   header h1{margin-right:8px}
   header button{padding:10px 12px;font-size:16px;white-space:nowrap;flex:0 0 auto}
   header button.lnk{padding:10px 8px}
-  header button.cur{flex:0 1 auto;min-width:0}
   #gl,#re,#nav{flex-wrap:nowrap;gap:6px}
   #gl{min-width:0}   /* sonst kann der lange Gastname nie schrumpfen, weil #gl nicht unter seine Inhaltsbreite darf */
   #gl > :not(#pop){padding:0 14px}
@@ -216,21 +216,19 @@ function render() {
   markiere();
 }
 
-// Gästeleiste im Kopf, auf jedem Reiter sichtbar, solange eine Schicht offen ist: aktueller Gast (Tipp = die anderen
-// Anwesenden), Zahl der belegten Schlüssel, Neuer Gast, Gegangene Gäste und die Schicht. Die Karte in der Kasse bleibt
-// daneben unverändert – die Leiste ist ein zweiter Weg, kein Ersatz.
+// Leiste im Kopf (auf jedem Reiter, solange eine Schicht offen ist): „N aktiv“ wählt den Gast (Liste aller Anwesenden
+// aller offenen Schichten), „+“ legt einen neuen Gast an, „Gegangen“ listet die Gegangenen, der Schichten-Schalter regelt
+// alles an der Schicht. Einen eigenen Knopf für den aktuellen Gast gibt es nicht mehr: er steht in der Gastkarte darunter.
 function gLeiste() {
   const s = schicht();
   if (!s) return `<button class="on" data-act="oeffnenForm">Schicht öffnen</button>`;
   const off = offeneSchichten();
-  const da = s.gaeste.filter(x => x.da), weg = s.gaeste.filter(x => !x.da);
+  const weg = s.gaeste.filter(x => !x.da);
   const aktiv = off.reduce((n, x) => n + x.gaeste.filter(g => g.da).length, 0);
-  const cur = s.gaeste.find(x => x.id === U.gast);
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
-  const chip = x => { const t = gastSumme(s, x.id);
-    return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
-  let h = `<button class="cur ${U.pop === 'gast' ? 'on' : ''}" data-act="pop" data-v="gast">🔑 ${cur ? esc(kundeText(cur)) : 'Kein Gast'} ▾</button>
-    <span class="anz">${aktiv} aktiv</span>
+  const chip = (x, sch) => { const t = gastSumme(sch, x.id);
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(kundeText(x))} ${t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+  let h = `<button class="anz" data-act="pop" data-v="gast">${aktiv} aktiv ▾</button>
     <button class="plus" data-act="neuGastTop" title="Neuer Gast" aria-label="Neuer Gast">+</button>
     <button class="${U.pop === 'weg' ? 'on' : ''}" data-act="pop" data-v="weg">Gegangen (${weg.length}) ▾</button>
     <button class="${U.pop === 'sch' ? 'on' : ''}" data-act="pop" data-v="sch">${schName(s.nr)} ▾</button>`;
@@ -239,8 +237,11 @@ function gLeiste() {
     <div class="row">${off.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schTop" data-v="${x.id}">${datumDe(x.datum)} · ${schName(x.nr)}</button>`).join('')}</div>
     <div class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</div>
     <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button><button data-act="oeffnenForm">＋ Neue Schicht</button></div></div>`;
-  if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${da.length}) – Gast wählen:</div><div class="row">${da.map(chip).join('') || '<span class="mut">Niemand.</span>'}</div></div>`;
-  if (U.pop === 'weg') h += `<div id="pop"><div class="mut">Gegangene Gäste (${weg.length}):</div><div class="row">${weg.map(chip).join('') || '<span class="mut">Noch niemand gegangen.</span>'}</div></div>`;
+  if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${aktiv}) – Gast wählen:</div>` + off.map(x => {
+    const da = x.gaeste.filter(g => g.da);
+    return (off.length > 1 ? `<div class="mut">${schName(x.nr)} ${datumDe(x.datum)}</div>` : '') + `<div class="row">${da.map(g => chip(g, x)).join('') || '<span class="mut">Niemand.</span>'}</div>`;
+  }).join('') + `</div>`;
+  if (U.pop === 'weg') h += `<div id="pop"><div class="mut">Gegangene Gäste (${weg.length}):</div><div class="row">${weg.map(x => chip(x, s)).join('') || '<span class="mut">Noch niemand gegangen.</span>'}</div></div>`;
   return h;
 }
 
@@ -524,12 +525,10 @@ function vGast(s, k) {
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
   return `<div class="card"><div class="k4row"><span class="k4">🔑 ${esc(kundeText(go))}</span>
-  ${s.mas.map(m => `<span class="k4 mt" title="Masseur der Schicht">${esc(name('mas', m))}</span>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
+  ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
   <div class="zwei"><div>
-  <h3>Masseur für Massagen</h3>
-  <div class="seg">${s.mas.map(m => `<button class="${m === U.mas ? 'on' : ''}" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="mut">(keiner in der Schicht)</span>'}</div>
   <h3>Leistungen</h3><div class="grid">${aktive('lei').map(l =>
     `<button class="${l.massage ? 'mass' : ''}" data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}${l.massage ? ' · Massage' : ''}</small></button>`).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div>
   <h3>Waren</h3><div class="grid">${aktive('war').map(l =>
@@ -764,7 +763,7 @@ const A = {
   gast: v => { U.gast = v; U.gastZu = false; },
   // Die Leiste im Kopf: Auswahl öffnet/schließt die Liste; jede andere Aktion schließt sie (siehe Klick-Behandlung unten).
   pop: v => { U.pop = U.pop === v ? null : v; },
-  gastTop: v => { U.gast = v; U.gastZu = false; U.extra = false; U.tab = 'kasse'; U.form = null; },
+  gastTop: (v, el) => { U.gast = v; if (el && el.dataset.sch) U.sch = el.dataset.sch; U.gastZu = false; U.extra = false; U.tab = 'kasse'; U.form = null; },
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
@@ -860,7 +859,7 @@ const A = {
     const s = schicht(); if (!s || !U.gast) return;
     const l = S[el.dataset.k].find(x => x.id === v);
     let masseur = '';
-    if (l.massage) { masseur = U.mas; if (!masseur) return alert('Bitte einen Masseur wählen (beim Öffnen der Schicht angeben).'); }
+    if (l.massage) { masseur = U.mas; if (!masseur) return alert('Bitte oben in der Zeile einen Masseur antippen. Ohne Masseure in der Schicht: Schicht bearbeiten.'); }
     s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
   },
   buchWeg: v => { const s = schicht(); if (confirm('Buchung löschen?')) s.buch = s.buch.filter(b => b.id !== v); },
