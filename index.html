@@ -66,6 +66,12 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+/* Die beiden Buchungsblöcke (Sauna, Massage) liegen unter den Kacheln nebeneinander, darunter die Liste */
+.zblocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin:8px 0 0}
+.zblocks .zblock{margin:0}
+.stat{font-size:13px;font-weight:600;white-space:nowrap}
+.stat.off{color:var(--warn)}.stat.bez{color:var(--ok)}
+tr.zoffen td{background:#fdf3f1}
 /* Hauptseite: oben die Kacheln der drei Rubriken nebeneinander, darunter die Abrechnung des Gastes */
 .rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 18px;align-items:start;margin-bottom:6px}
 .grid.kach{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
@@ -742,6 +748,14 @@ function vGast(s, k) {
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
   const extra = extraOptionen(s), ok = offenKat(s, k), zv = zahlVerteilung(s, k);
+  // Stand einer Position in der Liste: bezahlt, sonst offen; ist nur ein Teil der Menge bezahlt, steht sie ebenfalls als offen da
+  // („offen · 1 von 2“) – die Zahlung deckt die Positionen der Reihe nach (zahlVerteilung).
+  const geb = b => {
+    const bez = zv[b.id] || 0, wert = b.preis * b.menge;
+    if (bez >= wert) return ' <span class="stat bez">bezahlt</span>';
+    const offen = b.menge - Math.floor(bez / b.preis + 1e-9);
+    return ` <span class="stat off">offen${offen < b.menge ? ` · ${offen} von ${b.menge}` : ''}</span>`;
+  };
   const vlN = s.buch.filter(b => b.gast === k && vlName(b.name)).reduce((a, b) => a + b.menge, 0);
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
@@ -757,18 +771,10 @@ function vGast(s, k) {
   <div class="rub"><h3>Massagen</h3><div class="grid kach">${aktive('lei').filter(l => l.massage).map(l => kachel(l, 'lei', 'm', kachelStand(buch, zv, l, true))).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div></div>
   <div class="rub"><h3>Waren</h3><div class="grid kach">${aktive('war').map(l => kachel(l, 'war', 'w', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div></div>
   </div>
-  <div class="zwei"><div>
-  <h3>Gebucht</h3>
-  <table>${buch.map(b => `<tr><td>${b.menge}× ${esc(b.name)}${b.masseur ? ` <span class="mut">(${esc(name('mas', b.masseur))})</span>` : ''}<span class="mut"> ${b.zeit}${b.uebernommen ? ' · aus der Vorschicht' : ''}</span></td>
-    <td class="r">${eur(b.preis * b.menge)}</td><td class="r">${b.uebernommen ? '' : `<button class="x" data-act="buchWeg" data-v="${b.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
-  <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
-  <h3>Zahlungen</h3>
-  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Sonstiges Trinkgeld · ' : z.kat === 'sauna' ? 'Sauna · ' : z.kat === 'massage' ? 'Massage' + (z.masseur ? ' (' + esc(name('mas', z.masseur)) + ')' : '') + ' · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
-    <td class="r">${eur(z.betrag)}</td><td class="r">${z.uebernommen ? '' : `<button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
-  <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
-  </div><div>
+  <div class="zblocks">
   ${zahlBlock('s', ok.sauna, 'Sauna', 'Das Trinkgeld geht an ' + esc(name('ma', s.ma)) + ' (Kasse).')}
   ${zahlBlock('m', Math.max(0, Math.min(ok.je[U.mas] || 0, ok.massage)), 'Massage' + (U.mas ? ' · ' + esc(name('mas', U.mas)) : ''), U.mas ? 'Das Trinkgeld geht an ' + esc(name('mas', U.mas)) + '.' : 'Oben in der Zeile einen Masseur antippen.')}
+  </div>
   <div class="row" style="margin-top:12px"><button data-act="extraSchalter">Sonstiges Trinkgeld</button></div>
   ${U.extra ? `<div class="modal" role="dialog" aria-label="Sonstiges Trinkgeld"><div class="card">
     <h2>Sonstiges Trinkgeld</h2>
@@ -777,6 +783,16 @@ function vGast(s, k) {
     <div class="mut">Geht gleichmäßig an die Angewählten:</div>
     <div class="seg">${extra.map(([v, l]) => `<button class="${U.extraSel.includes(v) ? 'on' : ''}" data-act="extraWahl" data-v="${v}">${esc(l)}</button>`).join('') || '<span class="mut">Keine Mitarbeiter oder Masseure angelegt.</span>'}</div>
     <div class="row" style="margin-top:12px"><button class="ok" style="min-height:56px;min-width:180px" data-act="extraBuchen">Buchen</button><button data-act="extraSchalter">Abbrechen</button></div></div></div>` : ''}
+  <div class="zwei"><div>
+  <h3>Gebucht</h3>
+  <table>${buch.map(b => `<tr class="${geb(b).startsWith(' <span class="stat bez"') ? '' : 'zoffen'}"><td>${b.menge}× ${esc(b.name)}${b.masseur ? ` <span class="mut">(${esc(name('mas', b.masseur))})</span>` : ''}<span class="mut"> ${b.zeit}${b.uebernommen ? ' · aus der Vorschicht' : ''}</span>${geb(b)}</td>
+    <td class="r">${eur(b.preis * b.menge)}</td><td class="r">${b.uebernommen ? '' : `<button class="x" data-act="buchWeg" data-v="${b.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch nichts gebucht.</td></tr>'}
+  <tr><th>Summe</th><th class="r">${eur(t.soll)}</th><th></th></tr></table>
+  </div><div>
+  <h3>Zahlungen</h3>
+  <table>${zahl.map(z => `<tr><td>${z.extra ? 'Sonstiges Trinkgeld · ' : z.kat === 'sauna' ? 'Sauna · ' : z.kat === 'massage' ? 'Massage' + (z.masseur ? ' (' + esc(name('mas', z.masseur)) + ')' : '') + ' · ' : ''}${esc(z.art)} <span class="mut">${z.zeit}${z.uebernommen ? ' · aus der Vorschicht' : ''}</span>${z.tip ? ` · Trinkgeld ${eur(z.tip)} → ${tipVerteilung(s, z).map(x => esc(empfName(x.an)) + ' ' + eur(x.betrag)).join(', ')}` : ''}</td>
+    <td class="r">${eur(z.betrag)}</td><td class="r">${z.uebernommen ? '' : `<button class="x" data-act="zahlWeg" data-v="${z.id}">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch keine Zahlung.</td></tr>'}
+  <tr><th>${t.offen > 0 ? '<span class="warn">Noch offen</span>' : t.offen < 0 ? 'Überzahlt' : '<span class="good">Beglichen</span>'}</th><th class="r">${eur(Math.abs(t.offen))}</th><th></th></tr></table>
   </div></div></div>`;
 }
 function empfName(v) { if (!v) return 'gemeinsam'; const [t, i] = v.split(':'); return t === 'm' ? name('mas', i) : name('ma', i); }
