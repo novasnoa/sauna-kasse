@@ -25,6 +25,12 @@ Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelm
 (auf dem iPad „Zum Home-Bildschirm“ wählen). Netz zuerst, Zwischenspeicher nur als Rückfall – so ist eine neue
 Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint „Offline“, solange kein Netz da ist.
 
+## Verlängerung
+
+Der Eintritt gilt 4 Stunden. Für jede angebrochene Stunde danach bucht die Kasse selbst 1× „Verlängerung“ auf den Gast;
+oben in der Gastkarte steht „n × Verlängerung gebucht“. Preis und Name kommen aus der Leistung „Verlängerung“ (Stammdaten → Services) –
+ohne sie bucht die Kasse nichts und zeigt einen Hinweis. Beim „Gast geht“ zählt die zuletzt angebrochene Stunde noch mit.
+
 ## Kartenzahlung
 
 Bei Zahlart „Karte“ steht im Zahlblock der Betrag groß (Betrag + Trinkgeld), damit man ihn am Kartengerät nur abtippt.

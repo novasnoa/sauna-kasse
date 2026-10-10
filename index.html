@@ -66,6 +66,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+.k4.vl{background:#fde8e4;color:var(--warn);border-color:var(--warn)}
 .gross{margin:10px 0 2px;padding:8px 12px;border:2px solid var(--acc);border-radius:10px;background:#fff;text-align:center}
 .grossbetrag{font-size:46px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--acc)}
 .vermerk{margin-top:14px;padding:8px 12px;border:1px dashed var(--line);border-radius:8px;background:#fcfaf7;font-size:15px}
@@ -254,6 +255,7 @@ function zahlKlasse(s, id) { const t = gastSumme(s, id); return t.offen > 0 ? 'o
 
 /* ---------- Anzeige ---------- */
 function render() {
+  if (verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   $('nav').innerHTML = [['abr', 'Abrechnung'], ['stamm', 'Stammdaten']]
     .map(([t, l]) => `<button class="lnk ${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
@@ -313,6 +315,38 @@ function uhrenAktualisieren() {
   });
 }
 setInterval(uhrenAktualisieren, 1000);
+
+// Verlängerung: Der Eintritt gilt 4 Stunden (LIMIT_MS). Für jede angebrochene Stunde danach bucht die Kasse selbst
+// 1× „Verlängerung“ auf den Gast – die erste Minute nach 4:00 zählt schon als erste Stunde. Preis und Name kommen aus
+// der Leistung „Verlängerung“ in den Stammdaten (Services); ohne sie bucht die Kasse nichts und zeigt einen Hinweis.
+// Die Buchung hat eine feste Id je Gast („vl-<Gast>“): zwei Geräte rechnen dasselbe und legen so keine Doppelten an.
+// Was in der Vorschicht schon berechnet wurde (übernommene Zeilen), wird abgezogen; nimmt jemand per ✕ eine Einheit
+// weg, merkt sich der Gast das (vlAbzug), sonst käme sie beim nächsten Takt wieder.
+const vlName = n => /^verl(ä|ae)ngerung/i.test(String(n || '').trim());
+const vlItem = () => aktive('lei').find(l => !l.massage && vlName(l.name));
+const vlStunden = (g, bis) => { const u = (bis || Date.now()) - g.ts - LIMIT_MS; return u > 0 ? Math.ceil(u / 3600000) : 0; };
+function vlFuerGast(s, g, l) {
+  if (!l || !g.ts) return false;
+  const n = vlStunden(g); if (!n) return false;
+  const schon = s.buch.filter(b => b.gast === g.id && b.uebernommen && vlName(b.name)).reduce((a, b) => a + b.menge, 0);
+  const soll = Math.max(0, n - schon - (g.vlAbzug || 0)); if (!soll) return false;
+  const b = s.buch.find(x => x.id === 'vl-' + g.id);
+  if (!b) { s.buch.push({ id: 'vl-' + g.id, gast: g.id, name: l.name, preis: l.preis, menge: soll, masseur: '', zeit: uhr(), auto: true }); return true; }
+  if (b.menge < soll) { b.menge = soll; b.zeit = uhr(); return true; }
+  return false;
+}
+function verlaengerungenPruefen() {
+  const l = vlItem(); if (!l) return false;
+  let geaendert = false;
+  offeneSchichten().forEach(s => s.gaeste.forEach(g => { if (g.da && vlFuerGast(s, g, l)) geaendert = true; }));
+  return geaendert;
+}
+// Alle 30 Sekunden; mitten in einer Eingabe wird nicht neu gezeichnet (dann beim nächsten Takt).
+function vlTakt() {
+  if (/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  if (verlaengerungenPruefen()) { behalte(); speichern(); render(); }
+}
+setInterval(vlTakt, 30000);
 
 // Rot färben ohne neu zu zeichnen, damit angefangene Eingaben nicht verloren gehen.
 function markiere() {
@@ -617,11 +651,13 @@ function vGast(s, k) {
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
   const extra = extraOptionen(s), ok = offenKat(s, k);
+  const vlN = s.buch.filter(b => b.gast === k && vlName(b.name)).reduce((a, b) => a + b.menge, 0);
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
   return `<div class="card"><div class="k4row"><span class="k4 ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : ''}">🔑 ${esc(kundeText(go))}</span>
   ${go.da && go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">⏱ ${uhrText(go.ts)}</span>` : ''}
+  ${vlN ? `<span class="k4 vl" title="Automatisch je angebrochener Stunde nach 4 Stunden">${vlN} × Verlängerung gebucht</span>` : ''}${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
   ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
@@ -958,7 +994,9 @@ const A = {
   },
   gastFrei: v => { const s = schicht(); if (s) gastAufnehmen(s, S.kun.find(x => x.id === v)); },
   geht: v => {
-    const s = schicht(), g = s.gaeste.find(x => x.id === v), o = gastSumme(s, v).offen;
+    const s = schicht(), g = s.gaeste.find(x => x.id === v);
+    vlFuerGast(s, g, vlItem());   // die zuletzt angebrochene Stunde zählt noch, bevor der Gast geht
+    const o = gastSumme(s, v).offen;
     if (o > 0 && !confirm(`Es sind noch ${eur(o)} offen. Gast trotzdem gehen lassen?`)) return;
     g.da = false; g.ab = uhr();
     // Ohne offenen Betrag ist beim Gast nichts mehr zu tun: seine Seite schließt sich, bis ein Gast gewählt wird.
@@ -978,7 +1016,7 @@ const A = {
     if (l.massage) { masseur = U.mas; if (!masseur) return alert('Bitte oben in der Zeile einen Masseur antippen. Ohne Masseure in der Schicht: Schicht bearbeiten.'); }
     // Gleicher Artikel beim selben Gast (und gleichem Masseur) erhöht die Menge, statt eine weitere Zeile anzulegen.
     // Aus der Vorschicht Übernommenes bleibt unberührt, es ist dort schon abgerechnet.
-    const da = s.buch.find(b => b.gast === U.gast && !b.uebernommen && b.name === l.name && b.preis === l.preis && (b.masseur || '') === masseur);
+    const da = s.buch.find(b => b.gast === U.gast && !b.uebernommen && !b.auto && b.name === l.name && b.preis === l.preis && (b.masseur || '') === masseur);
     if (da) da.menge += 1;
     else s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
   },
@@ -986,6 +1024,7 @@ const A = {
   buchWeg: v => {
     const s = schicht(), b = s.buch.find(x => x.id === v); if (!b) return;
     if (!confirm(b.menge > 1 ? `Eine Einheit „${b.name}“ entfernen?` : 'Buchung löschen?')) return;
+    if (b.auto && !b.uebernommen) { const g = s.gaeste.find(x => x.id === b.gast); if (g) g.vlAbzug = (g.vlAbzug || 0) + 1; }
     if (b.menge > 1) b.menge -= 1; else s.buch = s.buch.filter(x => x.id !== v);
   },
   // Sauna: Trinkgeld an den Mitarbeiter an der Kasse. Massage: Trinkgeld an den gewählten Masseur. Anteilig verteilt wird
