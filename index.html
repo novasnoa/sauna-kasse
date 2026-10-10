@@ -322,8 +322,14 @@ setInterval(uhrenAktualisieren, 1000);
 // Die Buchung hat eine feste Id je Gast („vl-<Gast>“): zwei Geräte rechnen dasselbe und legen so keine Doppelten an.
 // Was in der Vorschicht schon berechnet wurde (übernommene Zeilen), wird abgezogen; nimmt jemand per ✕ eine Einheit
 // weg, merkt sich der Gast das (vlAbzug), sonst käme sie beim nächsten Takt wieder.
-const vlName = n => /^verl(ä|ae)ngerung/i.test(String(n || '').trim());
-const vlItem = () => aktive('lei').find(l => !l.massage && vlName(l.name));
+// Erkennung großzügig: Groß/Klein, ä/ae/a (auch zerlegtes ä vom Tablet), Zusätze wie „Verlängerung 1 Std.“ oder
+// „Stunden-Verlängerung“. Gesucht wird in den Services, danach in den Waren; die genaue Schreibweise „Verlängerung“ geht vor.
+const vlNorm = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/ae/g, 'a').replace(/\s+/g, ' ').trim();
+const vlName = n => vlNorm(n).includes('verlangerung');
+const vlItem = () => {
+  const alle = [...aktive('lei').filter(l => !l.massage), ...aktive('war')].filter(l => vlName(l.name));
+  return alle.find(l => vlNorm(l.name) === 'verlangerung') || alle[0];
+};
 const vlStunden = (g, bis) => { const u = (bis || Date.now()) - g.ts - LIMIT_MS; return u > 0 ? Math.ceil(u / 3600000) : 0; };
 function vlFuerGast(s, g, l) {
   if (!l || !g.ts) return false;
