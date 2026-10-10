@@ -361,7 +361,9 @@ function markiere() {
   document.querySelectorAll('.nachzahlung[data-ts]').forEach(d => {
     const ms = jetzt - d.dataset.ts, min = Math.floor(ms / 60000);
     d.hidden = ms < LIMIT_MS;
-    d.textContent = `⏰ Seit ${Math.floor(min / 60)} Std. ${min % 60} Min. im Haus – der Eintritt gilt nur 4 Stunden. Nachzahlung fällig!`;
+    // Mit gebuchten Verlängerungen steht deren Zahl im Banner; vorher (oder ohne Leistung „Verlängerung“) der Hinweis auf die 4 Stunden.
+    const vl = +d.dataset.vl || 0;
+    d.textContent = `⏰ Seit ${Math.floor(min / 60)} Std. ${min % 60} Min. im Haus – ` + (vl ? `${vl} × Verlängerung gebucht` : 'der Eintritt gilt nur 4 Stunden. Nachzahlung fällig!');
   });
 }
 setInterval(markiere, 30000);
@@ -663,10 +665,10 @@ function vGast(s, k) {
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
   return `<div class="card"><div class="k4row"><span class="k4 ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : ''}">🔑 ${esc(kundeText(go))}</span>
   ${go.da && go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">⏱ ${uhrText(go.ts)}</span>` : ''}
-  ${vlN ? `<span class="k4 vl" title="Automatisch je angebrochener Stunde nach 4 Stunden">${vlN} × Verlängerung gebucht</span>` : ''}${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
+  ${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
   ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
-  ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" hidden></div>` : ''}
+  ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" data-vl="${vlN}" hidden></div>` : ''}
   <div class="zwei"><div>
   <h3>Leistungen</h3><div class="grid">${aktive('lei').filter(l => !l.massage).map(l =>
     `<button data-act="buche" data-k="lei" data-v="${l.id}">${esc(l.name)}<small>${eur(l.preis)}</small></button>`).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div>
