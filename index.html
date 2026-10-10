@@ -68,10 +68,16 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .k4.go{margin-left:auto}
 /* Hauptseite: oben die Kacheln der drei Rubriken nebeneinander, darunter die Abrechnung des Gastes */
 .rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 18px;align-items:start;margin-bottom:6px}
-.grid.kach{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
-.grid button.kachel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;min-height:96px;padding:10px 6px;font-size:16px;line-height:1.15}
-.kachel .kn{word-break:break-word}
-.kachel small{margin-top:1px}
+.grid.kach{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
+.grid button.kachel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;min-height:132px;padding:12px 8px;font-size:18px;line-height:1.15}
+.kachel .kn{word-break:break-word;font-weight:500}
+.kachel small{margin-top:1px;font-size:14px}
+.kachel .st{font-size:12px;font-weight:600}
+/* Stand für den gewählten Gast: Zähler oben rechts; Farbe: offen rot, teilweise bezahlt gelb, bezahlt grün */
+.kachel .zahl{position:absolute;top:6px;right:6px;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--warn);color:#fff;font-size:15px;font-weight:700;line-height:26px}
+.kachel.offen{background:#fde8e4;border-color:var(--warn)}.kachel.offen .st{color:var(--warn)}
+.kachel.teil{background:#fbf0dc;border-color:#b7791f}.kachel.teil .zahl{background:#b7791f}.kachel.teil .st{color:#8a5a12}
+.kachel.bezahlt{background:#e6f3ea;border-color:var(--ok)}.kachel.bezahlt .zahl{background:var(--ok)}.kachel.bezahlt .st{color:var(--ok)}
 .kachel.l .ic{color:#8a4b1f}.kachel.m .ic{color:#0F6E56}.kachel.w .ic{color:#5F5E5A}
 .ic{flex:none}
 .symgr h3{margin:12px 0 4px}
@@ -286,8 +292,34 @@ function symbolFuer(l, k) {
   return r && ICONS[r[1]] ? r[1] : (k === 'war' ? 'shopping-bag' : 'tag');
 }
 const ikone = (n, g) => ICONS[n] ? `<svg class="ic" viewBox="0 0 24 24" width="${g || 28}" height="${g || 28}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>` : '';
-// Kachel zum Buchen: Symbol, Name, Preis (kl: l Leistung, m Massage, w Ware)
-const kachel = (l, k, kl) => `<button class="kachel ${kl}${kl === 'm' ? ' mass' : ''}" data-act="buche" data-k="${k}" data-v="${l.id}">${ikone(symbolFuer(l, k), 30)}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small></button>`;
+// Bezahlt je Buchungszeile eines Gastes: Die Zahlungen decken die Zeilen der Reihe nach (älteste zuerst) – Sauna-Zahlungen die
+// Zeilen ohne Masseur, Massage-Zahlungen die Zeilen des jeweiligen Masseurs. Zahlungen ohne kat (früher gebucht) füllen danach
+// zuerst offene Sauna-, dann Massagezeilen. Rein zur Anzeige auf den Kacheln; Summen und Offen rechnet weiter gastSumme/offenKat.
+function zahlVerteilung(s, k) {
+  const bu = s.buch.filter(b => b.gast === k), za = s.zahl.filter(z => z.gast === k), bez = {};
+  const wert = b => b.preis * b.menge, rest = b => wert(b) - (bez[b.id] || 0), summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
+  const fuell = (zeilen, topf) => zeilen.forEach(b => { const x = Math.max(0, Math.min(topf.v, rest(b))); bez[b.id] = (bez[b.id] || 0) + x; topf.v -= x; });
+  const sauna = bu.filter(b => !b.masseur), mass = bu.filter(b => b.masseur);
+  fuell(sauna, { v: summe(za.filter(z => z.kat === 'sauna'), z => z.betrag) });
+  [...new Set(mass.map(b => b.masseur))].forEach(m => fuell(mass.filter(b => b.masseur === m), { v: summe(za.filter(z => z.kat === 'massage' && z.masseur === m), z => z.betrag) }));
+  const alt = { v: summe(za.filter(z => !z.kat), z => z.betrag) };
+  fuell(sauna, alt); fuell(mass, alt);
+  return bez;
+}
+// Stand einer Kachel für diesen Gast: wie oft gebucht (n), wie viel davon bezahlt, und der Gesamtzustand
+function kachelStand(buch, bez, l, massage) {
+  const z = buch.filter(b => b.name === l.name && !!b.masseur === !!massage);
+  const n = z.reduce((a, b) => a + b.menge, 0); if (!n) return null;
+  const wert = z.reduce((a, b) => a + b.preis * b.menge, 0), bezahlt = z.reduce((a, b) => a + (bez[b.id] || 0), 0);
+  const einheiten = Math.min(n, Math.floor(bezahlt / (wert / n) + 1e-9));
+  return { n, einheiten, stand: bezahlt >= wert ? 'bezahlt' : bezahlt > 0 ? 'teil' : 'offen' };
+}
+// Kachel zum Buchen: Symbol, Name, Preis (kl: l Leistung, m Massage, w Ware); st = Stand für den gewählten Gast (oder null)
+const kachel = (l, k, kl, st) => {
+  const txt = st ? (st.stand === 'bezahlt' ? 'bezahlt' : st.stand === 'offen' ? 'offen' : `${st.einheiten} von ${st.n} bezahlt`) : '';
+  return `<button class="kachel ${kl}${kl === 'm' ? ' mass' : ''}${st ? ' ' + st.stand : ''}" data-act="buche" data-k="${k}" data-v="${l.id}"${st ? ` title="${st.n}× gebucht, ${txt}"` : ''}>
+    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40)}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
+};
 // Auswahl in den Stammdaten: alle Symbole der Sammlung, nach Gruppen, mit Suche (filtert im Dokument, ohne Neuzeichnen)
 function vSymbole(aktuell) {
   return `<div class="modal" role="dialog" aria-label="Symbol wählen"><div class="card sym">
@@ -709,7 +741,7 @@ function vGast(s, k) {
   const t = gastSumme(s, k);
   const buch = s.buch.filter(b => b.gast === k), zahl = s.zahl.filter(z => z.gast === k);
   if (!U.mas || !s.mas.includes(U.mas)) U.mas = s.mas[0] || '';
-  const extra = extraOptionen(s), ok = offenKat(s, k);
+  const extra = extraOptionen(s), ok = offenKat(s, k), zv = zahlVerteilung(s, k);
   const vlN = s.buch.filter(b => b.gast === k && vlName(b.name)).reduce((a, b) => a + b.menge, 0);
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
@@ -721,9 +753,9 @@ function vGast(s, k) {
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" data-vl="${vlN}" hidden></div>` : ''}
   <div class="rubriken">
-  <div class="rub"><h3>Leistungen</h3><div class="grid kach">${aktive('lei').filter(l => !l.massage).map(l => kachel(l, 'lei', 'l')).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div></div>
-  <div class="rub"><h3>Massagen</h3><div class="grid kach">${aktive('lei').filter(l => l.massage).map(l => kachel(l, 'lei', 'm')).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div></div>
-  <div class="rub"><h3>Waren</h3><div class="grid kach">${aktive('war').map(l => kachel(l, 'war', 'w')).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Leistungen</h3><div class="grid kach">${aktive('lei').filter(l => !l.massage).map(l => kachel(l, 'lei', 'l', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Massagen</h3><div class="grid kach">${aktive('lei').filter(l => l.massage).map(l => kachel(l, 'lei', 'm', kachelStand(buch, zv, l, true))).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Waren</h3><div class="grid kach">${aktive('war').map(l => kachel(l, 'war', 'w', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div></div>
   </div>
   <div class="zwei"><div>
   <h3>Gebucht</h3>
