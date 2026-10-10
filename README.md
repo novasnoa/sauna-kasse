@@ -25,6 +25,13 @@ Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelm
 (auf dem iPad „Zum Home-Bildschirm“ wählen). Netz zuerst, Zwischenspeicher nur als Rückfall – so ist eine neue
 Fassung sofort da. Die Buchungen liegen ohnehin lokal im Browser. Oben erscheint „Offline“, solange kein Netz da ist.
 
+## Symbole auf den Kacheln
+
+Jede Leistung, Massage und Ware hat ein Linien-Symbol (Tabler Icons, MIT-Lizenz, in der Datei eingebettet, 254 Stück in 8 Gruppen).
+Ohne eigene Wahl bestimmt die Kasse es nach Stichwörtern im Namen, sonst gilt ein Standardsymbol der Rubrik. In den Stammdaten
+(Services, Massagen, Waren) lässt sich das Symbol beim Anlegen und Ändern über „Symbol ▾“ aus der ganzen Sammlung wählen, mit Suche.
+Auf der Hauptseite stehen die Kacheln der drei Rubriken oben, darunter die Abrechnung des Gastes.
+
 ## Verlängerung
 
 Der Eintritt gilt 4 Stunden. Für jede angebrochene Stunde danach bucht die Kasse selbst 1× „Verlängerung“ auf den Gast;
