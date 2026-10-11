@@ -43,6 +43,11 @@ label{display:inline-flex;align-items:center;gap:8px;min-height:48px}
 .tip button{min-width:64px}
 button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
 button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+#pin{max-width:360px;margin:24px auto;text-align:center}
+#pin-punkte{font-size:34px;letter-spacing:10px;min-height:48px;margin:6px 0}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.pad button{min-height:64px;font-size:24px}
+.reccode{font:700 26px/1.3 ui-monospace,monospace;letter-spacing:2px;background:#fff8e1;border:2px dashed var(--acc);border-radius:8px;padding:12px;text-align:center;margin:10px 0}
 button.x{color:var(--warn);min-width:48px;font-size:20px;padding:4px 8px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
 .tabs button.on{background:var(--acc);color:#fff}
@@ -176,7 +181,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 // nur als Vermerk und wird nicht von der Auszahlung abgezogen. Gerechnet wird je Buchungszeile und gerundet auf Cent.
 const MIETE_PROZENT = 30;
 const miete = b => Math.round(b.preis * b.menge * MIETE_PROZENT / 100);
-const U = { symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -342,6 +347,62 @@ document.addEventListener('input', e => {
   document.querySelectorAll('.symgr').forEach(g => { g.hidden = ![...g.querySelectorAll('.symb')].some(b => !b.hidden); });
 });
 
+/* ---------- PIN für Abrechnung und Stammdaten ----------
+   Warum so: Die Kasse hat keinen Server und kein Konto je Person, die PIN ist deshalb eine Sperre in der
+   App – sie hält neugierige Blicke und versehentliche Eingriffe ab, ist aber KEIN Schutz gegen jemanden, der
+   sich mit Browser-Werkzeugen auskennt (alle Daten liegen im Browser). Gespeichert wird nur ein Hash, mit
+   Salz und PBKDF2, in S.pin; so wandert die PIN über den Google-Abgleich auf alle Geräte. Die Sperre fällt
+   nach 5 Minuten ohne Bedienung wieder zu. Wer die PIN vergisst, setzt sie mit dem Wiederherstellungscode zurück,
+   der beim Setzen einmal angezeigt wird. */
+const PIN_MIN = 5 * 60 * 1000;
+const pinGesetzt = () => !!(S.pin && S.pin.h);
+const geschuetzt = () => U.tab === 'abr' || U.tab === 'stamm';
+const entsperrt = () => !pinGesetzt() || Date.now() < U.frei;
+async function pinHash(text, salt) {
+  try {
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(text), 'PBKDF2', false, ['deriveBits']);
+    const b = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 100000, hash: 'SHA-256' }, k, 256);
+    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+  } catch (e) {   // sehr alte Browser ohne crypto.subtle: schwächerer Notbehelf, damit die Kasse nicht aussperrt
+    let h = 5381; const t = salt + text; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+    return 'f' + (h >>> 0).toString(16);
+  }
+}
+function zufall(n, alphabet) {
+  const a = new Uint32Array(n); crypto.getRandomValues(a);
+  return [...a].map(x => alphabet[x % alphabet.length]).join('');
+}
+function pinAnzeige() { const e = $('pin-punkte'); if (e) e.textContent = '●'.repeat(U.pinEin.length) + '○'.repeat(Math.max(0, 4 - U.pinEin.length)); }
+function pinMeldung(t) { const e = $('pin-msg'); if (e) e.textContent = t || ''; }
+function vPin() {
+  if (U.pinReset) return `<div id="pin" class="card"><h2>PIN zurücksetzen</h2>
+    <div class="mut">Wiederherstellungscode eingeben (wurde beim Setzen der PIN angezeigt).</div>
+    <div class="row" style="justify-content:center"><input id="pin-rec" placeholder="XXXX-XXXX-XXXX" size="16" autocapitalize="characters" autocomplete="off"></div>
+    <div class="warn" id="pin-msg"></div>
+    <div class="row" style="justify-content:center"><button class="p" data-act="pinRecOk">Zurücksetzen</button><button data-act="pinRecAb">Zurück</button></div></div>`;
+  return `<div id="pin" class="card"><h2>🔒 Gesperrt</h2><div class="mut">Bitte PIN eingeben.</div>
+    <div id="pin-punkte"></div><div class="warn" id="pin-msg" style="min-height:24px"></div>
+    <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-act="pinZ" data-v="${n}">${n}</button>`).join('')}
+      <button data-act="pinDel" title="Löschen">⌫</button><button data-act="pinZ" data-v="0">0</button><button class="ok" data-act="pinOk">OK</button></div>
+    <button style="color:var(--mut);background:none;border:none;text-decoration:underline" data-act="pinVergessen">PIN vergessen?</button></div>`;
+}
+function vPinVerwaltung() {
+  if (U.rec) return `<div class="card"><h2>🔒 PIN gesetzt</h2>
+    <div><b>Wiederherstellungscode</b> – bitte jetzt notieren und sicher aufbewahren (z. B. beim Inhaber). Er wird nur jetzt angezeigt:</div>
+    <div class="reccode">${esc(U.rec)}</div>
+    <div class="mut">Wer die PIN vergisst, kann sie mit diesem Code zurücksetzen. Ohne Code und ohne PIN kommt man nicht mehr in Abrechnung und Stammdaten.</div>
+    <div class="row"><button class="ok" data-act="recGesehen">Notiert, weiter</button></div></div>`;
+  const gesetzt = pinGesetzt();
+  return `<div class="card"><h2>🔒 PIN für Abrechnung und Stammdaten</h2>
+    <div class="mut">${gesetzt ? 'Die PIN ist gesetzt. Sie gilt auf allen Geräten, die über Google abgleichen.' : 'Noch keine PIN – Abrechnung und Stammdaten sind für jeden offen.'}</div>
+    <div class="row"><input id="pin-neu1" type="password" inputmode="numeric" maxlength="8" size="12" placeholder="${gesetzt ? 'Neue PIN' : 'PIN'} (4–8 Ziffern)" autocomplete="off">
+      <input id="pin-neu2" type="password" inputmode="numeric" maxlength="8" size="12" placeholder="Wiederholen" autocomplete="off">
+      <button class="p" data-act="pinSetzen">${gesetzt ? 'PIN ändern' : 'PIN setzen'}</button></div>
+    <div class="warn" id="pin-msg"></div>
+    ${gesetzt ? `<div class="row"><button data-act="pinEntfernen">PIN entfernen</button></div>` : ''}
+    <div class="mut">Die PIN hält neugierige Blicke und versehentliche Eingriffe ab. Gegen jemanden, der sich mit Browser-Werkzeugen auskennt, schützt sie nicht – die Daten liegen im Browser. Die Kasse selbst (Buchen, Kassieren) bleibt ohne PIN bedienbar.</div></div>`;
+}
+
 /* ---------- Anzeige ---------- */
 function render() {
   if (verlaengerungenPruefen()) speichern();
@@ -350,7 +411,12 @@ function render() {
     .map(([t, l]) => `<button class="lnk ${U.tab === t ? 'on' : ''}" data-act="tab" data-v="${t}">${l}</button>`).join('');
   $('gl').innerHTML = gLeiste();
   const keep = U.keep; U.keep = null;
-  $('app').innerHTML = U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm();
+  if (!geschuetzt()) U.frei = 0;   // wer zur Kasse zurückgeht, sperrt Abrechnung und Stammdaten wieder
+  const gesperrt = geschuetzt() && !entsperrt();
+  if (geschuetzt() && pinGesetzt() && !gesperrt) U.frei = Date.now() + PIN_MIN;   // jede Bedienung verlängert
+  const sperrKnopf = geschuetzt() && pinGesetzt() && !gesperrt ? '<div class="row noprint"><button data-act="sperren">🔒 Jetzt sperren</button></div>' : '';
+  $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm());
+  if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
   markiere(); uhrenAktualisieren(); kartenAnzeigen();
 }
@@ -529,6 +595,8 @@ function zusammenfuehren(lok, rem) {
   const out = { v: 1 };
   for (const c of COLL) out[c] = mergeList(lok[c], rem[c] || [], tot);
   out.tot = tot;
+  const pn = (rem.pin && (!lok.pin || (rem.pin._t || 0) > (lok.pin._t || 0))) ? rem.pin : lok.pin;
+  if (pn) out.pin = pn;
   return out;
 }
 // Gleicher Inhalt = gleicher Text, egal in welcher Reihenfolge Schlüssel/Listen stehen (sonst Endlosabgleich).
@@ -970,8 +1038,10 @@ const STAMM = [
 const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
-  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
-    <button style="margin-left:auto" class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
+  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
+    <button style="margin-left:auto" class="${U.st === 'pin' ? 'on' : ''}" data-act="stab" data-v="pin">🔒 PIN</button>
+    <button class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
+  if (U.st === 'pin') return tabs + vPinVerwaltung();
   if (U.st === 'sich') return tabs + vSync() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
     <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div>
@@ -999,7 +1069,46 @@ function gastAufnehmen(s, k) {
   s.gaeste.push(g); U.gast = g.id; U.gastZu = false; U.extra = false; U.neu = false;
 }
 const A = {
-  tab: v => { U.tab = v; },
+  tab: v => { U.tab = v; U.pinEin = ''; U.pinReset = false; },
+  sperren: () => { U.frei = 0; U.tab = 'kasse'; },
+  pinZ: v => { if (U.pinEin.length < 8) U.pinEin += v; pinAnzeige(); return false; },
+  pinDel: () => { U.pinEin = U.pinEin.slice(0, -1); pinAnzeige(); return false; },
+  pinOk: () => {
+    if (Date.now() < U.pinSperreBis) { pinMeldung('Zu viele Versuche – bitte ' + Math.ceil((U.pinSperreBis - Date.now()) / 1000) + ' s warten.'); return false; }
+    const ein = U.pinEin; U.pinEin = ''; pinAnzeige();
+    if (!ein) return false;
+    pinHash(ein, S.pin.s).then(h => {
+      if (h === S.pin.h) { U.frei = Date.now() + PIN_MIN; U.pinFehl = 0; render(); return; }
+      if (++U.pinFehl >= 5) { U.pinFehl = 0; U.pinSperreBis = Date.now() + 30000; pinMeldung('Falsche PIN – 30 s Pause.'); } else pinMeldung('Falsche PIN.');
+    });
+    return false;
+  },
+  pinVergessen: () => { U.pinReset = true; },
+  pinRecAb: () => { U.pinReset = false; },
+  pinRecOk: () => {
+    const c = ($v('pin-rec') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    pinHash(c, S.pin.s).then(h => {
+      if (c && h === S.pin.r) { S.pin = { h: '', _t: Date.now() }; U.pinReset = false; U.tab = 'stamm'; U.st = 'pin'; speichern(); render(); alert('PIN zurückgesetzt. Bitte jetzt eine neue PIN setzen.'); }
+      else pinMeldung('Code stimmt nicht.');
+    });
+    return false;
+  },
+  pinSetzen: () => {
+    const a = $v('pin-neu1'), b = $v('pin-neu2');
+    if (!/^\d{4,8}$/.test(a)) { pinMeldung('Die PIN braucht 4 bis 8 Ziffern.'); return false; }
+    if (a !== b) { pinMeldung('Die beiden Eingaben sind verschieden.'); return false; }
+    const salz = zufall(16, 'abcdef0123456789'), code = zufall(12, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
+    Promise.all([pinHash(a, salz), pinHash(code, salz)]).then(([h, r]) => {
+      S.pin = { s: salz, h, r, _t: Date.now() }; U.rec = code.replace(/(.{4})(?=.)/g, '$1-'); U.frei = Date.now() + PIN_MIN;
+      speichern(); render();
+    });
+    return false;
+  },
+  recGesehen: () => { U.rec = ''; },
+  pinEntfernen: () => {
+    if (!confirm('PIN entfernen? Abrechnung und Stammdaten sind danach wieder für jeden offen.')) return false;
+    S.pin = { h: '', _t: Date.now() };
+  },
   stab: v => { U.st = v; U.edit = null; },
   gAn: () => {
     const c = GOOGLE_CLIENT_ID || $v('g-cid').trim();
@@ -1093,7 +1202,7 @@ const A = {
     const off = s.gaeste.filter(k => gastSumme(s, k.id).offen > 0).length;
     if (!confirm(off ? `${off} Kunde(n) haben noch offene Beträge. Schicht trotzdem schließen?` : 'Schicht schließen?')) return;
     s.gaeste.forEach(g => { if (g.da) { g.da = false; g.ab = uhr(); } });
-    s.zu = true; U.sch = null; U.tab = 'abr'; U.abr = s.id;
+    s.zu = true; U.sch = null; U.tab = entsperrt() ? 'abr' : 'kasse'; U.abr = s.id;
   },
   gastNeu: () => {
     const s = schicht(), nr = $v('g-nr').trim(); if (!s || !nr) return;
@@ -1209,12 +1318,18 @@ document.addEventListener('click', e => {
   if (A[el.dataset.act](el.dataset.v, el) === false) return;
   speichern(); render();
 });
+document.addEventListener('keydown', e => {
+  if (!$('pin-punkte') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
+  if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk();
+});
+// Ist die Sperre inzwischen abgelaufen, zeigt eine offen gelassene Abrechnung wieder die PIN-Abfrage.
+setInterval(() => { if (geschuetzt() && pinGesetzt() && !entsperrt() && !$('pin-punkte') && !$('pin-rec')) render(); }, 15000);
 document.addEventListener('input', e => { if (/^p-[sm]-(betrag|tip)$/.test(e.target.id || '')) kartenAnzeigen(); });
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'imp' && el.files[0]) {
     el.files[0].text().then(t => {
-      try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; S = migriere(n); speichern(); render(); }
+      try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; n.pin = S.pin; S = migriere(n); speichern(); render(); }
       catch (x) { alert('Das ist keine gültige Sicherung.'); }
     });
   } else if (el.tagName === 'SELECT' && el.dataset.act) { A[el.dataset.act](); render(); }
