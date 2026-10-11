@@ -785,7 +785,7 @@ const GOOGLE_CLIENT_ID = '710064191222-nt56kg78p26guueu0is853evlqg9vl2a.apps.goo
 const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
+const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', tokMail: false, mailBusy: false, mailFehler: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
 if (!G.dev) { G.dev = id(); lsSet('sk-dev', G.dev); }
 
 // Was an einem Satz „seine eigene“ Änderung ist (ohne die Untersätze einer Schicht und ohne Zeitstempel).
@@ -847,8 +847,10 @@ function zusammenfuehren(lok, rem) {
   const out = { v: 1 };
   for (const c of COLL) out[c] = mergeList(lok[c], rem[c] || [], tot);
   out.tot = tot;
-  const pn = (rem.pin && (!lok.pin || (rem.pin._t || 0) > (lok.pin._t || 0))) ? rem.pin : lok.pin;
-  if (pn) out.pin = pn;
+  for (const k of ['pin', 'einst']) {   // Einzelwerte: der neuere Stand gewinnt
+    const pn = (rem[k] && (!lok[k] || (rem[k]._t || 0) > (lok[k]._t || 0))) ? rem[k] : lok[k];
+    if (pn) out[k] = pn;
+  }
   return out;
 }
 // Gleicher Inhalt = gleicher Text, egal in welcher Reihenfolge Schlüssel/Listen stehen (sonst Endlosabgleich).
@@ -866,12 +868,15 @@ function gLade() {
     t.onload = ok; t.onerror = () => no(new Error('offline')); document.head.appendChild(t);
   });
 }
-function gToken(interaktiv) {
-  if (G.tok && Date.now() < G.exp - 60000) return Promise.resolve();
+// „mail“: zusätzlich das Recht, in Ihrem Namen Mails zu senden (nur Senden, kein Lesen). Es wird nur verlangt, wenn der
+// automatische Mailversand eingeschaltet ist – sonst sieht die Google-Anmeldung davon nichts.
+const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
+function gToken(interaktiv, mail) {
+  if (G.tok && Date.now() < G.exp - 60000 && (!mail || G.tokMail)) return Promise.resolve();
   return gLade().then(() => new Promise((ok, no) => {
     const c = google.accounts.oauth2.initTokenClient({
-      client_id: G.cid, scope: 'https://www.googleapis.com/auth/drive.appdata',
-      callback: r => { if (r.access_token) { G.tok = r.access_token; G.exp = Date.now() + (r.expires_in || 3600) * 1000; ok(); } else no(new Error('login')); },
+      client_id: G.cid, scope: 'https://www.googleapis.com/auth/drive.appdata' + (mail ? ' ' + MAIL_RECHT : ''),
+      callback: r => { if (r.access_token) { G.tok = r.access_token; G.tokMail = !!mail && (r.scope || MAIL_RECHT).includes('gmail.send'); G.exp = Date.now() + (r.expires_in || 3600) * 1000; ok(); } else no(new Error('login')); },
       error_callback: () => no(new Error('login'))
     });
     c.requestAccessToken({ prompt: interaktiv ? '' : 'none' });
@@ -895,7 +900,8 @@ async function gSync(interaktiv) {
   if (!navigator.onLine) return gStatus('offline');
   G.busy = true; gStatus('sync');
   try {
-    await gToken(interaktiv);
+    // Fehlt nur das Mail-Recht (noch nicht freigegeben), soll der Abgleich trotzdem laufen.
+    try { await gToken(interaktiv, automailAn()); } catch (e) { if (!automailAn()) throw e; await gToken(interaktiv, false); }
     stempeln();
     const l = await (await gApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=100&fields=files(id,name,modifiedTime)&q=' + encodeURIComponent("name contains 'sauna-kasse-'"))).json();
     const eigenName = 'sauna-kasse-' + G.dev + '.json'; let neu = false;
@@ -914,6 +920,79 @@ async function gSync(interaktiv) {
     if (neu) gNeuZeichnen();
   } catch (e) { gStatus(e.message === 'login' ? 'anmelden' : navigator.onLine ? 'fehler' : 'offline', e.message); }
   finally { G.busy = false; }
+}
+/* ---------- Automatische Mail an die Masseure nach Schichtende ----------
+   Warum Gmail aus dem Browser: Die Kasse hat keinen Server. Mit dem Google-Konto, das ohnehin angemeldet ist, kann der
+   Browser direkt über die Gmail-Schnittstelle senden (Absender = das Sauna-Konto, Kopie im „Gesendet“-Ordner). Weil das
+   Netz fehlen oder die Anmeldung abgelaufen sein kann, wird nicht „im Moment des Schließens“ gesendet, sondern über
+   einen Auftrag an der Schicht (s.mailFaellig): er wird so lange wiederholt, bis jede Mail raus ist. Jede gesendete Mail
+   steht in s.mails (nach Masseur) – das geht im Abgleich auf alle Geräte, damit niemand doppelt sendet. */
+const automailAn = () => !!(S.einst && S.einst.automail);
+// Masseure, die in dieser Schicht etwas zu berichten haben (Massagen oder Trinkgeld); die anderen bekommen keine leere Mail.
+function mailMasseure(sch) {
+  const ids = [...new Set([...sch.mas, ...sch.buch.filter(b => b.masseur).map(b => b.masseur), ...sch.zahl.flatMap(z => tipVerteilung(sch, z).filter(x => x.an.startsWith('m:')).map(x => x.an.slice(2)))])];
+  return ids.filter(i => { const d = masseurDaten([sch], i); return d.bu.length || d.tr.length; });
+}
+function gmailSenden(an, betreff, text) {
+  if (/[\r\n<>,;]/.test(an)) return Promise.reject(new Error('Ungültige Adresse'));
+  const b64 = t => btoa(unescape(encodeURIComponent(t)));
+  const kopf = [`To: ${an}`, `Subject: =?UTF-8?B?${b64(betreff)}?=`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64'].join('\r\n');
+  const raw = btoa(kopf + '\r\n\r\n' + b64(text).replace(/.{76}/g, '$&\r\n')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return gApi('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw }) });
+}
+// Fehlende Adressen sofort melden (dann kann man sie nachtragen), statt still nichts zu senden.
+function mailOhneAdresse(sch) { return mailMasseure(sch).filter(i => !kontakt('mas', i).email).map(i => name('mas', i)); }
+const mailFehlerText = e => e.message === 'login' || e.message === 'Mail-Recht fehlt' ? 'Bitte Mailversand bei Google freigeben (Stammdaten → Sicherung & Google).'
+  : e.message === 'HTTP 403' ? 'Google lehnt das Senden ab (403): Gmail-API aktiviert und Bereich gmail.send eingetragen?' : e.message;
+async function mailRunde(interaktiv) {
+  if (!automailAn() || !G.an || !G.cid || G.mailBusy || !navigator.onLine) return;
+  const auftraege = S.sch.filter(x => x.zu && x.mailFaellig);
+  if (!auftraege.length) return;
+  G.mailBusy = true;
+  try {
+    await gToken(interaktiv, true);
+    if (!G.tokMail) throw new Error('Mail-Recht fehlt');
+    for (const sch of auftraege) {
+      let rest = 0;
+      for (const mid of mailMasseure(sch)) {
+        if ((sch.mails || {})[mid]) continue;
+        const m = kontakt('mas', mid);
+        if (!m.email) continue;                       // ohne Adresse: nicht wiederholen, wurde beim Schließen gemeldet
+        try {
+          await gmailSenden(m.email, `Abrechnung ${name('mas', mid)} – ${schName(sch.nr)} ${datumDe(sch.datum)}`,
+            masseurText([sch], mid) + '\nDiese Mail hat die Kasse nach Schichtende automatisch gesendet.\n');
+          sch.mails = { ...(sch.mails || {}), [mid]: Date.now() };
+          speichern();
+        } catch (e) { rest++; G.mailFehler = mailFehlerText(e); if (e.message === 'login') throw e; }
+      }
+      if (!rest) { sch.mailFaellig = false; speichern(); }
+    }
+    if (!auftraege.some(x => x.mailFaellig)) G.mailFehler = '';
+  } catch (e) {
+    G.mailFehler = mailFehlerText(e);
+  } finally { G.mailBusy = false; if (U.tab === 'stamm' && U.st === 'sich') { behalte(); render(); } }
+}
+const mailOffen = () => S.sch.filter(x => x.zu && x.mailFaellig).length;
+function vMail() {
+  if (!G.an) return `<div class="card"><h2>✉ Abrechnung automatisch per Mail</h2><div class="mut">Dafür zuerst den Abgleich über Google einschalten – die Mails werden über dasselbe Google-Konto gesendet.</div></div>`;
+  const an = automailAn(), off = mailOffen();
+  return `<div class="card"><h2>✉ Abrechnung automatisch per Mail</h2>
+  <div class="mut">Nach dem Schließen oder Wechseln einer Schicht bekommt jede Masseurin und jeder Masseur seine Abrechnung dieser Schicht per Mail, sofern eine E-Mail-Adresse in den Stammdaten steht. Absender ist das angemeldete Google-Konto; die Kopie liegt im Gesendet-Ordner.</div>
+  <div class="row"><b>${an ? 'Eingeschaltet' : 'Ausgeschaltet'}</b>${an && off ? ` · ${off} Schicht(en) warten noch auf den Versand` : ''}</div>
+  ${G.mailFehler ? `<div class="warn">${esc(G.mailFehler)}</div>` : ''}
+  <div class="row">${an ? `<button data-act="mailAus">Ausschalten</button>${off ? '<button class="p" data-act="mailJetzt">Jetzt senden</button>' : ''}` : '<button class="p" data-act="mailAn">Einschalten und Mailversand bei Google freigeben</button>'}</div>
+  <details><summary class="mut" style="min-height:44px;display:flex;align-items:center">Einrichtung (einmalig)</summary><ol class="mut">
+   <li>Google Cloud Console → „APIs &amp; Dienste“ → „Bibliothek“ → <b>Gmail API</b> aktivieren.</li>
+   <li>Google Auth Platform → „Datenzugriff“ → Bereich <b>…/auth/gmail.send</b> („E-Mails in Ihrem Namen senden“) hinzufügen.</li>
+   <li>Hier „Einschalten“ drücken und die Freigabe bei Google bestätigen (einmal je Gerät).</li></ol></details></div>`;
+}
+// Beim Schließen merken, dass Mails fällig sind, Fehlendes melden und den Versand sofort versuchen.
+function mailAuftrag(sch) {
+  if (!automailAn()) return;
+  sch.mailFaellig = true;
+  const ohne = mailOhneAdresse(sch);
+  if (ohne.length) setTimeout(() => alert('Keine E-Mail-Adresse hinterlegt bei: ' + ohne.join(', ') + '.\nFür sie wird keine Mail gesendet – bitte in den Stammdaten nachtragen.'), 50);
+  setTimeout(() => mailRunde(false), 300);
 }
 function gPlan() { clearTimeout(G.timer); G.timer = setTimeout(() => gSync(false), 2500); }
 // Nicht mitten in einer Eingabe neu zeichnen (am Tablet würde sonst die Tastatur verschwinden).
@@ -948,8 +1027,8 @@ function vSync() {
    <li>„Anmeldedaten“ → „OAuth-Client-ID erstellen“ → Typ <b>Webanwendung</b>. Bei „Autorisierte JavaScript-Quellen“ <b>${esc(location.origin)}</b> eintragen.</li>
    <li>Die erzeugte Client-ID hier einfügen und auf jedem Gerät „einschalten“ drücken.</li></ol></details></div>`;
 }
-setInterval(() => gSync(false), 30000);
-addEventListener('online', () => gSync(false));
+setInterval(() => { gSync(false); mailRunde(false); }, 30000);
+addEventListener('online', () => { gSync(false); mailRunde(false); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) gSync(false); });
 if (G.an) { gStatus('sync'); setTimeout(() => gSync(false), 800); }
 
@@ -1232,6 +1311,7 @@ function masseurAbrechnung(sch, mid) {
   const m = kontakt('mas', mid);
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
   <div class="mut">${sch.map(s => schName(s.nr)).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
+  ${sch.length === 1 && (sch[0].mails || {})[mid] ? `<div class="mut noprint">✉ Mail automatisch gesendet am ${new Date(sch[0].mails[mid]).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}</div>` : ''}
   <div class="row">${mailKnopf('Masseur*innen', [m.email], 'Abrechnung ' + name('mas', mid) + ' ' + datumDe(sch[0].datum), masseurText(sch, mid))}</div>
   <h3>Massagen</h3>` + (bu.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Massage</th><th class="r">Preis</th></tr>
   ${bu.map(b => `<tr><td>${schName(b.s.nr)}</td><td>${b.zeit}</td><td>${esc(gastText(b.s, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
@@ -1308,7 +1388,7 @@ function vStamm() {
     <button class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
   if (U.st === 'pin') return tabs + vPinVerwaltung();
   if (U.st === 'sumup') return tabs + vSumup();
-  if (U.st === 'sich') return tabs + vSync() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
+  if (U.st === 'sich') return tabs + vSync() + vMail() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
     <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div>
     <div class="row"><button class="x" style="font-size:16px;padding:10px 14px" data-act="buchungenLoeschen">Alle Buchungen löschen (Stammdaten bleiben)</button></div></div>`;
@@ -1465,6 +1545,12 @@ const A = {
     if (!c) return alert('Bitte die Google-Client-ID eintragen (Anleitung steht darunter).');
     G.cid = c; lsSet('sk-gcid', c); G.an = true; lsSet('sk-gsync', '1'); gStatus('sync'); gSync(true);
   },
+  mailAn: () => {
+    S.einst = { automail: true, _t: Date.now() }; speichern(); G.mailFehler = '';
+    gToken(true, true).then(() => { mailRunde(false); behalte(); render(); }).catch(() => { G.mailFehler = 'Die Freigabe bei Google fehlt noch.'; behalte(); render(); });
+  },
+  mailAus: () => { S.einst = { automail: false, _t: Date.now() }; G.mailFehler = ''; },
+  mailJetzt: () => { mailRunde(true); return false; },
   gAus: () => { if (confirm('Google-Abgleich auf diesem Gerät ausschalten? Die Daten hier bleiben erhalten.')) { G.an = false; G.tok = ''; lsSet('sk-gsync', '0'); gStatus('aus'); } },
   gJetzt: () => { gSync(false); return false; },
   gLogin: () => { gSync(true); return false; },
@@ -1544,7 +1630,7 @@ const A = {
       alt.zahl.filter(z => z.gast === g.id).forEach(z => neu.zahl.push({ ...z, id: id(), gast: ng.id, tip: 0, tipAn: '', uebernommen: true }));
       g.da = false; g.ab = jetzt;
     });
-    alt.zu = true; S.sch.push(neu); U.sch = neu.id; U.gast = null; U.gastZu = false; U.form = null;
+    alt.zu = true; mailAuftrag(alt); S.sch.push(neu); U.sch = neu.id; U.gast = null; U.gastZu = false; U.form = null;
   },
   schliessen: () => {
     const s = schicht(); if (!s) return;
@@ -1552,6 +1638,7 @@ const A = {
     if (!confirm(off ? `${off} Kunde(n) haben noch offene Beträge. Schicht trotzdem schließen?` : 'Schicht schließen?')) return;
     s.gaeste.forEach(g => { if (g.da) { g.da = false; g.ab = uhr(); } });
     s.zu = true; U.sch = null; U.tab = entsperrt() ? 'abr' : 'kasse'; U.abr = s.id;
+    mailAuftrag(s);
   },
   gastNeu: () => {
     const s = schicht(), nr = $v('g-nr').trim(); if (!s || !nr) return;

@@ -85,3 +85,11 @@ Geprüft nur gegen eine Drive-Attrappe (siehe Commit), nicht gegen das echte Goo
 
 Nur in den Stammdaten (Services, Massagen, Waren: ▲ ▼ je Zeile); die Startseite zeigt dieselbe Reihenfolge. Sie steht je Eintrag im Feld `o`
 und wandert über den Google-Abgleich auf alle Geräte. Neue Einträge stehen hinten.
+
+## Automatische Mail an die Masseure
+
+Stammdaten → Sicherung & Google → „✉ Abrechnung automatisch per Mail“. Nach dem Schließen oder Wechseln einer Schicht sendet die Kasse jeder
+Masseurin / jedem Masseur mit Massagen oder Trinkgeld in dieser Schicht die Abrechnung (Text wie `masseurText`) über die Gmail-Schnittstelle des
+angemeldeten Google-Kontos (Recht `gmail.send`, nur Senden). Der Versand ist ein Auftrag an der Schicht (`mailFaellig`) und wird bei fehlendem Netz oder
+abgelaufener Anmeldung wiederholt; `mails` je Masseur verhindert Doppelversand über alle Geräte. Ohne Adresse in den Stammdaten wird beim Schließen gewarnt.
+Einrichtung: Gmail API aktivieren, Bereich `gmail.send` unter „Datenzugriff“ eintragen. Nur gegen eine Attrappe geprüft, nicht gegen echtes Gmail.
