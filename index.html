@@ -88,6 +88,13 @@ tr.zoffen td{background:#fdf3f1}
 /* Hauptseite: oben die Kacheln der drei Rubriken nebeneinander, darunter die Abrechnung des Gastes */
 .rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 18px;align-items:start;margin-bottom:6px}
 .grid.kach{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
+/* Querformat: Leistungen 2 Spalten, Massagen 1, Waren 3 – nebeneinander, Breite im Verhältnis der Spalten (2 : 1 : 3). Hochformat bleibt wie es war. */
+@media (orientation:landscape) and (min-width:900px){
+  .rubriken{grid-template-columns:2fr 1fr 3fr}
+  .rub:nth-child(1) .grid.kach{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rub:nth-child(2) .grid.kach{grid-template-columns:minmax(0,1fr)}
+  .rub:nth-child(3) .grid.kach{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 .grid button.kachel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;min-height:132px;padding:12px 8px;font-size:18px;line-height:1.15}
 .kachel .kn{word-break:break-word;font-weight:500}
 .kachel small{margin-top:1px;font-size:14px}
