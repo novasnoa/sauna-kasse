@@ -403,6 +403,37 @@ function vPinVerwaltung() {
     <div class="mut">Die PIN hält neugierige Blicke und versehentliche Eingriffe ab. Gegen jemanden, der sich mit Browser-Werkzeugen auskennt, schützt sie nicht – die Daten liegen im Browser. Die Kasse selbst (Buchen, Kassieren) bleibt ohne PIN bedienbar.</div></div>`;
 }
 
+/* ---------- Kartengerät (SumUp Solo): Zugriffstest ----------
+   Warum zuerst nur ein Test: Die Kasse hat keinen Server. Ob der Browser die SumUp-Schnittstelle erreichen darf (CORS), ob
+   der Schlüssel angenommen wird und wie die Antworten aussehen, zeigt erst ein echter, rein lesender Aufruf: die Liste der
+   gekoppelten Kartengeräte. Es wird nichts bezahlt. Der API-Schlüssel wird NICHT gespeichert – er steht nur im Eingabefeld
+   und ist mit dem Neuladen oder Wechsel der Seite weg; gemerkt wird nur die Händlernummer. Der Ablauf des Zugriffs
+   steht an einer Stelle (sumupAnfrage), damit eine spätere Anbindung ihn wiederverwenden kann. */
+const SUMUP = 'https://api.sumup.com';
+async function sumupAnfrage(pfad, schluessel, optionen) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(SUMUP + pfad, { ...(optionen || {}), headers: { Authorization: 'Bearer ' + schluessel, ...((optionen || {}).headers || {}) } });
+    const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (e) {}
+    return { ok: r.ok, status: r.status, json, text, ms: Date.now() - t0 };
+  } catch (e) {
+    // Kein Ergebnis: entweder kein Internet oder der Browser durfte die Antwort nicht lesen (CORS). Ein Aufruf ohne Lesen
+    // (no-cors) unterscheidet beides: gelingt er, ist SumUp erreichbar.
+    let erreichbar = false;
+    try { await fetch(SUMUP + '/', { mode: 'no-cors', cache: 'no-store' }); erreichbar = true; } catch (x) {}
+    return { fehler: true, erreichbar, ms: Date.now() - t0 };
+  }
+}
+function vSumup() {
+  const code = lsGet('sk-sumup-code');
+  return `<div class="card"><h2>💳 Kartengerät (SumUp Solo) – Zugriffstest</h2>
+    <div class="mut">Prüft nur lesend, ob die Kasse SumUp erreicht und welche Kartengeräte gekoppelt sind. Es wird nichts bezahlt. Der Schlüssel wird nicht gespeichert – er gilt nur, bis die Seite neu geladen wird. Erzeugen Sie ihn im SumUp-Entwicklerbereich selbst und geben Sie ihn nur hier ein, nie weiter.</div>
+    <div class="row"><input id="su-code" size="14" placeholder="Händlernummer" value="${esc(code)}" autocomplete="off" autocapitalize="characters">
+      <input id="su-key" type="password" size="30" placeholder="API-Schlüssel" autocomplete="new-password">
+      <button class="p" data-act="sumupTest">Zugriff testen</button></div>
+    <div id="su-erg" class="mut" style="margin-top:8px">Noch nicht getestet.</div></div>`;
+}
+
 /* ---------- Anzeige ---------- */
 function render() {
   if (verlaengerungenPruefen()) speichern();
@@ -1038,10 +1069,12 @@ const STAMM = [
 const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
-  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
-    <button style="margin-left:auto" class="${U.st === 'pin' ? 'on' : ''}" data-act="stab" data-v="pin">🔒 PIN</button>
+  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' && U.st !== 'sumup' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
+    <button style="margin-left:auto" class="${U.st === 'sumup' ? 'on' : ''}" data-act="stab" data-v="sumup">💳 Kartengerät</button>
+    <button class="${U.st === 'pin' ? 'on' : ''}" data-act="stab" data-v="pin">🔒 PIN</button>
     <button class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
   if (U.st === 'pin') return tabs + vPinVerwaltung();
+  if (U.st === 'sumup') return tabs + vSumup();
   if (U.st === 'sich') return tabs + vSync() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
     <div class="row"><button data-act="export">Sicherung herunterladen</button>
     <label>Sicherung einspielen: <input type="file" id="imp" accept=".json"></label></div>
@@ -1105,6 +1138,33 @@ const A = {
     return false;
   },
   recGesehen: () => { U.rec = ''; },
+  // Zugriffstest: rein lesend (Liste der Kartengeräte). Zeigt, was angekommen ist – auch die Form der Antwort, damit die
+  // spätere Anbindung nicht raten muss.
+  sumupTest: () => {
+    const code = $v('su-code').trim().toUpperCase(), key = $v('su-key').trim(), e = $('su-erg');
+    if (!code || !key) { e.className = 'warn'; e.textContent = 'Bitte Händlernummer und API-Schlüssel eintragen.'; return false; }
+    lsSet('sk-sumup-code', code);
+    e.className = 'mut'; e.textContent = 'Teste …';
+    sumupAnfrage('/v0.1/merchants/' + encodeURIComponent(code) + '/readers', key).then(r => {
+      const zeit = `<div class="mut">${r.ms} ms</div>`, roh = t => `<details><summary class="mut">Antwort anzeigen</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(t)}</pre></details>`;
+      if (r.fehler) {
+        e.className = 'warn';
+        e.innerHTML = r.erreichbar
+          ? '<b>SumUp ist erreichbar, aber der Browser darf die Antwort nicht lesen</b> (CORS). Dann braucht die Anbindung einen Zwischenserver.' + zeit
+          : '<b>Keine Verbindung zu SumUp.</b> Internet am Tablet prüfen und noch einmal testen.' + zeit;
+      } else if (r.ok) {
+        const liste = (r.json && (r.json.items || (Array.isArray(r.json) ? r.json : null))) || [];
+        e.className = 'good';
+        e.innerHTML = `<b>Zugriff funktioniert.</b> ${liste.length ? liste.length + ' Kartengerät(e) gekoppelt:' : 'Noch kein Kartengerät gekoppelt (am Solo: Verbindungen → Cloud API → Verbinden).'}`
+          + (liste.length ? `<ul class="mut" style="color:var(--ink)">${liste.map(x => `<li>${esc(x.name || x.id || '?')} · Status ${esc(x.status || '?')}${x.device ? ' · ' + esc(x.device.model || '') + ' ' + esc(x.device.identifier || '') : ''}</li>`).join('')}</ul>` : '') + zeit + roh(JSON.stringify(r.json || r.text, null, 1));
+      } else {
+        const hinweis = r.status === 401 ? 'Der Schlüssel wurde nicht angenommen.' : r.status === 403 ? 'Dem Schlüssel fehlt eine Berechtigung (zum Beispiel „payments“).' : r.status === 404 ? 'Händlernummer oder Adresse nicht gefunden – Händlernummer prüfen.' : 'SumUp hat den Aufruf abgelehnt.';
+        e.className = 'warn';
+        e.innerHTML = `<b>HTTP ${r.status}:</b> ${hinweis}` + zeit + roh(JSON.stringify(r.json || r.text, null, 1));
+      }
+    });
+    return false;
+  },
   pinEntfernen: () => {
     if (!confirm('PIN entfernen? Abrechnung und Stammdaten sind danach wieder für jeden offen.')) return false;
     S.pin = { h: '', _t: Date.now() };
