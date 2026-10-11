@@ -47,6 +47,12 @@ gebraucht. Im Zahlblock (Zahlart Karte) gibt es dann „An Solo senden“: Betra
 die Kasse fragt das Ergebnis ab (alle 2,5 s, bis 5 Minuten) und bucht Betrag und Trinkgeld. Kein Webhook, kein Server. Bei Fehler oder Ausfall
 bleibt das Eintippen am Gerät. Noch nicht an einem echten Solo erprobt.
 
+Zwei Schalter unter „Kartengerät“, beide standardmäßig an: **Nur am Solo kassieren** (mit eingerichtetem Solo gibt es im Zahlblock weder Zahlart noch
+Trinkgeldfeld noch „Zahlung buchen“, nur den Knopf „An Solo senden“) und **Trinkgeld-Voreinstellung des Solo nutzen** (die Kasse schickt keine Prozente
+mit; das Trinkgeld kommt aus der Antwort). Der Knopf zeigt den Stand: blau bereit, gelb pulsierend gesendet, grün bezahlt (schließt sich nach 5 s),
+rot nicht bezahlt. Ob das Solo ohne gesendete Prozente Trinkgeld anbietet, sagt die SumUp-Doku nicht – erst der Test zeigt es; sonst den zweiten
+Schalter ausschalten. Gesondertes Trinkgeld bleibt über „Sonstiges Trinkgeld“.
+
 ## Kartenzahlung
 
 Bei Zahlart „Karte“ steht im Zahlblock der Betrag groß (Betrag + Trinkgeld), damit man ihn am Kartengerät nur abtippt.
