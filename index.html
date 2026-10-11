@@ -445,14 +445,17 @@ function suEnde(phase, text) {
   U.suPay.phase = phase; U.suPay.text = text; localStorage.removeItem(SU_PEND); behalte(); render();
 }
 function suErfolg(p, t) {
-  const gesamt = Math.round((+t.amount || 0) * 100), tip = Math.round((+t.tip_amount || 0) * 100), sch = S.sch.find(x => x.id === p.sch);
+  // Die Doku sagt nicht, ob `amount` das Trinkgeld schon enthält. Deshalb zählt als Rechnungsbetrag der, den wir selbst geschickt haben
+  // (p.betrag); aus der Antwort kommt nur das Trinkgeld (`tip_amount`, Hauptwährung). Weicht `amount` von beiden Lesarten ab, steht ein Hinweis da.
+  const amount = Math.round((+t.amount || 0) * 100), tip = Math.round((+t.tip_amount || 0) * 100), gesamt = p.betrag + tip, sch = S.sch.find(x => x.id === p.sch);
+  const abw = amount && amount !== gesamt && amount !== p.betrag;
   if (sch && !sch.zahl.some(z => z.ftid === p.ftid)) {   // nie doppelt buchen (Neuladen, zwei Wege zum selben Ergebnis)
-    const z = { id: id(), ma: sch.ma, gast: p.gast, betrag: gesamt - tip, tip, art: 'Karte', zeit: uhr(), ftid: p.ftid, ctid: t.transaction_code || t.id || '', solo: true };
+    const z = { id: id(), ma: sch.ma, gast: p.gast, betrag: p.betrag, tip, art: 'Karte', zeit: uhr(), ftid: p.ftid, ctid: t.transaction_code || t.id || '', solo: true };
     z.tipAn = tip ? 'auto' : '';   // anteilig nach Massage-Anteil (tipVerteilung)
     sch.zahl.push(z); speichern();
   }
   localStorage.removeItem(SU_PEND);
-  U.suPay = { phase: 'ok', text: `Bezahlt: ${eur(gesamt)}${tip ? ` (davon Trinkgeld ${eur(tip)})` : ''}`, p }; behalte(); render();
+  U.suPay = { phase: 'ok', text: `Bezahlt: ${eur(gesamt)}${tip ? ` (davon Trinkgeld ${eur(tip)})` : ''}${abw ? ` – Achtung: SumUp meldet ${eur(amount)}, bitte prüfen` : ''}`, p }; behalte(); render();
 }
 async function suWarten(p) {
   const code = lsGet('sk-sumup-code'), bis = p.t0 + 5 * 60000;
@@ -1278,7 +1281,7 @@ const A = {
     lsSet('sk-sumup-code', code); e.className = 'mut'; e.textContent = 'Koppele …';
     sumupAnfrage('/v0.1/merchants/' + suEnc(code) + '/readers', key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairing_code: pc, name }) }).then(r => {
       if (r.fehler || !r.ok) {
-        const hinweis = r.status === 404 ? 'Kein wartendes Gerät für diesen Code – ist er abgelaufen? Am Solo einen neuen erzeugen.' : r.status === 409 ? 'Das Gerät ist schon gekoppelt oder wartet nicht mehr.' : r.status === 403 ? 'Dem Schlüssel fehlt die Berechtigung zum Koppeln (readers.write).' : suFehlerText(r);
+        const hinweis = r.status === 404 ? 'Kein wartendes Gerät für diesen Code – ist er abgelaufen? Am Solo einen neuen erzeugen.' : r.status === 409 ? 'Das Gerät ist schon gekoppelt oder wartet nicht mehr.' : r.status === 400 ? 'Der Code oder der Name wurde abgelehnt (Code: 8 oder 9 Zeichen).' : r.status === 401 ? 'Der Schlüssel wurde nicht angenommen oder es fehlt die Berechtigung.' : r.status === 403 ? 'Dem Schlüssel fehlt die Berechtigung zum Koppeln (readers.write).' : suFehlerText(r);
         e.className = 'warn'; e.innerHTML = `<b>Nicht gekoppelt.</b> ${esc(hinweis)}` + (r.text ? `<details><summary class="mut">Antwort anzeigen</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(r.text)}</pre></details>` : '');
         return;
       }
