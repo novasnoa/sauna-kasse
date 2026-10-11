@@ -80,3 +80,8 @@ Die Client-ID ist kein Geheimnis; sie kann in `index.html` bei `GOOGLE_CLIENT_ID
 dann entfällt die Eingabe auf jedem Gerät.
 
 Geprüft nur gegen eine Drive-Attrappe (siehe Commit), nicht gegen das echte Google.
+
+## Reihenfolge der Kacheln
+
+Auf der Startseite „↕ Kacheln anordnen“ (◀ ▶ je Kachel, „✓ Fertig“ beendet), in den Stammdaten bei Services, Massagen und Waren ▲ ▼.
+Beides ändert dasselbe Feld `o` je Eintrag, das über den Google-Abgleich auf alle Geräte wandert. Neue Einträge stehen hinten.
