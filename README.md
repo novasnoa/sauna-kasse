@@ -83,5 +83,5 @@ Geprüft nur gegen eine Drive-Attrappe (siehe Commit), nicht gegen das echte Goo
 
 ## Reihenfolge der Kacheln
 
-Auf der Startseite „↕ Kacheln anordnen“ (◀ ▶ je Kachel, „✓ Fertig“ beendet), in den Stammdaten bei Services, Massagen und Waren ▲ ▼.
-Beides ändert dasselbe Feld `o` je Eintrag, das über den Google-Abgleich auf alle Geräte wandert. Neue Einträge stehen hinten.
+Nur in den Stammdaten (Services, Massagen, Waren: ▲ ▼ je Zeile); die Startseite zeigt dieselbe Reihenfolge. Sie steht je Eintrag im Feld `o`
+und wandert über den Google-Abgleich auf alle Geräte. Neue Einträge stehen hinten.

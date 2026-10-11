@@ -89,9 +89,6 @@ tr.zoffen td{background:#fdf3f1}
 .rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 18px;align-items:start;margin-bottom:6px}
 .grid.kach{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
 .grid button.kachel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;min-height:132px;padding:12px 8px;font-size:18px;line-height:1.15}
-.kw{display:flex;flex-direction:column;gap:6px;outline:2px dashed var(--acc);outline-offset:3px;border-radius:10px}
-.kw .kachel{opacity:.85}
-.pfeile{display:flex;gap:6px}.pfeile button{flex:1;min-height:48px;font-size:20px;padding:4px}
 .kachel .kn{word-break:break-word;font-weight:500}
 .kachel small{margin-top:1px;font-size:14px}
 .kachel .st{font-size:12px;font-weight:600}
@@ -193,7 +190,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { anord: false, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -330,14 +327,10 @@ function kachelStand(buch, bez, l, massage) {
   return { n, einheiten, stand: bezahlt >= wert ? 'bezahlt' : bezahlt > 0 ? 'teil' : 'offen' };
 }
 // Kachel zum Buchen: Symbol, Name, Preis (kl: l Leistung, m Massage, w Ware); st = Stand für den gewählten Gast (oder null)
-const kachel = (l, k, kl, st, anord) => {
+const kachel = (l, k, kl, st) => {
   const txt = st ? (st.stand === 'bezahlt' ? 'bezahlt' : st.stand === 'offen' ? 'offen' : `${st.einheiten} von ${st.n} bezahlt`) : '';
-  const innen = `${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40)}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}`;
-  const kopf = `class="kachel ${kl}${kl === 'm' ? ' mass' : ''}${st ? ' ' + st.stand : ''}"`;
-  // Beim Anordnen bucht die Kachel nicht; darunter stehen zwei Pfeile (Berührung statt Ziehen: am Tablet zuverlässiger).
-  if (anord) return `<div class="kw"><button ${kopf} tabindex="-1" style="pointer-events:none">${innen}</button>
-    <div class="pfeile"><button data-act="rang" data-k="${k}" data-v="${l.id}" data-m="${kl}" data-r="-1" title="Nach vorn">◀</button><button data-act="rang" data-k="${k}" data-v="${l.id}" data-m="${kl}" data-r="1" title="Nach hinten">▶</button></div></div>`;
-  return `<button ${kopf} data-act="buche" data-k="${k}" data-v="${l.id}"${st ? ` title="${st.n}× gebucht, ${txt}"` : ''}>${innen}</button>`;
+  return `<button class="kachel ${kl}${kl === 'm' ? ' mass' : ''}${st ? ' ' + st.stand : ''}" data-act="buche" data-k="${k}" data-v="${l.id}"${st ? ` title="${st.n}× gebucht, ${txt}"` : ''}>
+    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40)}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
 };
 // Auswahl in den Stammdaten: alle Symbole der Sammlung, nach Gruppen, mit Suche (filtert im Dokument, ohne Neuzeichnen)
 function vSymbole(aktuell) {
@@ -1018,11 +1011,10 @@ function vGast(s, k) {
   ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
   ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" data-vl="${vlN}" hidden></div>` : ''}
-  <div class="row noprint"><button class="${U.anord ? 'ok' : ''}" data-act="anord">${U.anord ? '✓ Fertig' : '↕ Kacheln anordnen'}</button>${U.anord ? '<span class="mut">Mit ◀ ▶ verschieben – gilt für alle Geräte.</span>' : ''}</div>
   <div class="rubriken">
-  <div class="rub"><h3>Leistungen</h3><div class="grid kach">${sortiert('lei', l => !l.massage).map(l => kachel(l, 'lei', 'l', kachelStand(buch, zv, l, false), U.anord)).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div></div>
-  <div class="rub"><h3>Massagen</h3><div class="grid kach">${sortiert('lei', l => l.massage).map(l => kachel(l, 'lei', 'm', kachelStand(buch, zv, l, true), U.anord)).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div></div>
-  <div class="rub"><h3>Waren</h3><div class="grid kach">${sortiert('war').map(l => kachel(l, 'war', 'w', kachelStand(buch, zv, l, false), U.anord)).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Leistungen</h3><div class="grid kach">${sortiert('lei', l => !l.massage).map(l => kachel(l, 'lei', 'l', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Massagen</h3><div class="grid kach">${sortiert('lei', l => l.massage).map(l => kachel(l, 'lei', 'm', kachelStand(buch, zv, l, true))).join('') || '<span class="mut">Keine Massagen angelegt.</span>'}</div></div>
+  <div class="rub"><h3>Waren</h3><div class="grid kach">${sortiert('war').map(l => kachel(l, 'war', 'w', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Waren angelegt.</span>'}</div></div>
   </div>
   <div class="zblocks">
   ${zahlBlock('s', Math.max(0, t.offen), 'Zahlung', (suNur() ? 'Das Trinkgeld wählt die Kundin am Solo. ' : '') + 'Es wird anteilig verteilt: der Massage-Anteil an die Masseure, der Rest an ' + esc(name('ma', s.ma)) + ' (Kasse).')}
@@ -1524,7 +1516,6 @@ const A = {
   // Bearbeiten direkt in der Zeile: eine Kette von prompt()-Fenstern ist am Tablet mühsam.
   aendern: v => { U.edit = v; const x = ['lei', 'war'].map(k => S[k].find(y => y.id === v)).find(Boolean); U.editIcon = (x && x.icon) || ''; },
   aendAb: () => { U.edit = null; },
-  anord: () => { U.anord = !U.anord; },
   rang: (v, el) => { if (!verschiebe(el.dataset.k, v, +el.dataset.r, el.dataset.m)) return false; },
   aendSave: (v, el) => {
     const g = STAMM.find(x => x.id === el.dataset.g), o = S[g.k].find(x => x.id === v);
