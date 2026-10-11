@@ -87,7 +87,7 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .k4.exit{width:60px;padding:0;justify-content:center;color:var(--warn);border:2px solid var(--warn);background:#fff}
 .k4.timer{gap:8px;padding:0 20px 0 14px;min-width:150px;justify-content:center}
 .k4.timer .tt{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.5px}
-.pie{vertical-align:-6px;margin-left:8px;flex:none}
+.pie{vertical-align:middle;margin:-8px -6px -6px 8px;flex:none}   /* größer als die Zeile: negative Ränder, damit der Schlüssel nicht höher wird */
 /* Der Solo-Knopf zeigt den Stand der Zahlung: blau bereit, gelb (pulsiert) gesendet, grün bezahlt, rot nicht bezahlt */
 .sbtn{min-width:260px;min-height:56px;font-size:18px;font-weight:600;color:#fff;border:0;border-radius:10px}
 .sbtn.bereit{background:#2563a8}
@@ -672,9 +672,9 @@ function gLeiste() {
   const off = offeneSchichten();
   const aktiv = off.reduce((n, x) => n + x.gaeste.filter(g => g.da).length, 0);
   const weg = off.reduce((n, x) => n + x.gaeste.filter(g => !g.da).length, 0);
-  // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
+  // Ohne Betrag: wer noch zahlen muss, zeigt die Farbe des Schlüssels (rot offen, grün bezahlt); der Betrag steht in der Gastkarte.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
-    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? pie(x.ts) :'') : `<span class="umsatz">${eur(t.soll)}</span>`} ${x.da && t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? pie(x.ts) :'') : `<span class="umsatz">${eur(t.soll)}</span>`}</button>`; };
   // „Gäste“ mit den drei gleich großen Schaltern zu einer Gruppe verbunden (gruppe), jeder in einem eigenen leisen Farbton;
   // mit etwas Abstand folgt der Schichten-Schalter (sch).
   let h = `<span class="gruppe"><span class="gtitel">Gäste</span>
@@ -708,7 +708,7 @@ function pieD(f) {
   const w = 2 * Math.PI * f;
   return `M12 12L12 3.6A8.4 8.4 0 ${f > 0.5 ? 1 : 0} 1 ${(12 + 8.4 * Math.sin(w)).toFixed(2)} ${(12 - 8.4 * Math.cos(w)).toFixed(2)}Z`;
 }
-const pie = ts => `<svg class="pie" data-ts="${ts}" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Zeit seit Ankunft, voll nach 4 Stunden"><circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/><path class="pf" d="${pieD((Date.now() - ts) / LIMIT_MS)}" fill="currentColor"/></svg>`;
+const pie = ts => `<svg class="pie" data-ts="${ts}" viewBox="0 0 24 24" width="34" height="34" role="img" aria-label="Zeit seit Ankunft, voll nach 4 Stunden"><circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/><path class="pf" d="${pieD((Date.now() - ts) / LIMIT_MS)}" fill="currentColor"/></svg>`;
 function uhrText(ts) {
   const rest = LIMIT_MS - (Date.now() - ts), a = Math.abs(rest), z = n => String(n).padStart(2, '0');
   const t = `${Math.floor(a / 3600000)}:${z(Math.floor(a / 60000) % 60)}:${z(Math.floor(a / 1000) % 60)}`;
