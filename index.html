@@ -21,7 +21,7 @@ html{-webkit-text-size-adjust:100%}
 body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
 header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:8px max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left));display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 header h1{font-size:18px;margin:0 16px 0 0}
-header button{background:transparent;color:#fff;border:1px solid #ffffff80;padding:10px 18px;border-radius:8px;font-size:17px}
+header button{background:transparent;color:#fff;border:1px solid #ffffff80;padding:10px 18px;border-radius:var(--rk);font-size:17px}
 header button.on{background:#fff;color:var(--acc)}
 header h1{cursor:pointer;user-select:none;-webkit-user-select:none}
 header button.lnk{border:none;text-decoration:underline;padding:10px 8px}
@@ -59,27 +59,27 @@ table{width:100%;border-collapse:collapse;font-size:15px}
 td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
 td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .mut{color:var(--mut)}.warn{color:var(--warn);font-weight:600}.good{color:var(--ok);font-weight:600}
-.chip{padding:10px 18px;border-radius:26px;font-size:17px}
+.chip{padding:10px 18px;border-radius:var(--rk);font-size:17px}
 .chip.key{min-width:76px;font-size:20px;font-weight:600}
 @media(min-width:900px){.zwei{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}}
 .chip.on{background:var(--acc);color:#fff}
 /* Kopfzeile der Gastkarte: Schlüssel, die Masseure der Schicht und „Gast geht“ haben dieselbe Form (Höhe, Rundung,
    Schrift). Die Masseure sind nur durch den hellen Grund leicht abgesetzt; die Schaltfläche bleibt ein Knopf. */
 .k4row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 6px}
-.k4{display:inline-flex;align-items:center;min-height:44px;height:44px;padding:0 18px;margin:0;border-radius:22px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:17px;font-weight:600;line-height:1;white-space:nowrap}
+.k4{display:inline-flex;align-items:center;min-height:44px;height:44px;padding:0 18px;margin:0;border-radius:var(--rk);border:1px solid var(--line);background:#fff;color:var(--ink);font-size:17px;font-weight:600;line-height:1;white-space:nowrap}
 .k4.mt{background:#f5eee6;color:var(--acc);font-weight:500}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
 /* Neue Kopfzeile der Gastkarte – eine Leiste, alles gleich hoch: links der Schlüssel mit großer Nummer, dann die Masseure als
    eine zusammenhängende Auswahl, ganz rechts das Symbol „Gast geht“ und die 4-Stunden-Uhr. */
-.kopf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#faf6f1;border:1px solid var(--line);border-radius:18px}
-.kopf .k4{height:52px;min-height:52px;border-radius:26px;font-size:18px}
+.kopf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#faf6f1;border:1px solid var(--line);border-radius:calc(var(--rk) + 4px)}
+.kopf .k4{height:52px;min-height:52px;border-radius:var(--rk);font-size:18px}
 .kopf-key{gap:8px;padding:0 22px 0 14px}
 .kopf-key .knr{font-size:32px;font-weight:700;line-height:1;letter-spacing:.5px}
 .kopf-key .kname{font-size:15px;font-weight:500;opacity:.8}
 .kopf-key .ic{flex:none}
-.mgruppe{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid var(--line);border-radius:30px;background:#fff}
+.mgruppe{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid var(--line);border-radius:calc(var(--rk) + 3px);background:#fff}
 .mgruppe .mic{display:inline-flex;padding:0 4px 0 12px;color:#0F6E56}
 .mgruppe .k4{height:46px;min-height:46px;border:none;background:transparent;font-size:17px}
 .mgruppe .k4.mt.on{background:var(--acc);color:#fff}
@@ -106,7 +106,7 @@ tr.zoffen td{background:#fdf3f1}
 .rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 18px;align-items:start;margin-bottom:10px;margin-top:12px}   /* Luft zur Kopfzeile der Gastkarte */
 .grid.kach{grid-template-columns:repeat(auto-fill,minmax(114px,1fr));gap:8px}
 /* Drei Rubriken als getönte Felder mit farbigem Kopf – gleiche Farben wie die Symbole der Kacheln (Leistung braun, Massage grün, Ware grau) */
-:root{--kw:162px}   /* Kachelbreite im Querformat */
+:root{--kw:162px;--rk:6px}   /* --rk: Eckenrundung aller Kästchen in den beiden Kopfzeilen – nur ganz leicht */   /* Kachelbreite im Querformat */
 .rub{border-radius:14px;padding:8px 10px 12px;border-top:5px solid var(--rf);background:var(--rg);box-shadow:0 1px 3px #0000001a}
 .rub:nth-child(1){--rf:#8a4b1f;--rg:#fbf5ee;--n:2}.rub:nth-child(2){--rf:#0F6E56;--rg:#edf7f3;--n:1}.rub:nth-child(3){--rf:#5F5E5A;--rg:#f0f0ee;--n:3}
 .rub h3{margin:4px 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--rf)}
@@ -150,7 +150,7 @@ tr.zoffen td{background:#fdf3f1}
 #gl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* Alle Elemente der Leiste im Kopf haben dieselbe Form: gleich hoch, gleich rund, gleiche Schrift. Die drei Schalter
    „N aktiv“, „N gegangen“ und „＋ neu“ sind außerdem gleich breit; der Schichten-Schalter folgt mit etwas Abstand. */
-#gl > :not(#pop){display:inline-block;box-sizing:border-box;height:44px;min-height:44px;line-height:42px;padding:0 16px;margin:0;border-radius:22px;font-size:16px;white-space:nowrap}
+#gl > :not(#pop){display:inline-block;box-sizing:border-box;height:44px;min-height:44px;line-height:42px;padding:0 16px;margin:0;border-radius:var(--rk);font-size:16px;white-space:nowrap}
 #gl > :not(#pop).gruppe{display:inline-flex;align-items:center;padding:0;overflow:hidden;line-height:normal;border:1px solid #ffffff80}
 #gl .gtitel{padding:0 12px 0 14px;font-size:15px;font-weight:600;opacity:.9;white-space:nowrap}
 #gl .gruppe > button{box-sizing:border-box;height:42px;min-height:42px;padding:0 10px;margin:0;border:none;border-left:1px solid #ffffff59;border-radius:0;font-size:16px;line-height:1;white-space:nowrap;color:#fff}
@@ -201,7 +201,7 @@ tr.zoffen td{background:#fdf3f1}
   <span id="re">
   <span id="nav"></span>
   <button id="wolke" hidden class="noprint"></button>
-  <span id="netz" hidden style="background:#fff;color:var(--warn);font-weight:600;border-radius:20px;padding:6px 14px">● Offline – alles läuft lokal weiter</span></span>
+  <span id="netz" hidden style="background:#fff;color:var(--warn);font-weight:600;border-radius:var(--rk);padding:6px 14px">● Offline – alles läuft lokal weiter</span></span>
 </header>
 <main id="app"></main>
 
