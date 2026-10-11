@@ -181,7 +181,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 // nur als Vermerk und wird nicht von der Auszahlung abgezogen. Gerechnet wird je Buchungszeile und gerundet auf Cent.
 const MIETE_PROZENT = 30;
 const miete = b => Math.round(b.preis * b.menge * MIETE_PROZENT / 100);
-const U = { frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -218,7 +218,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'p-m-betrag', 'p-m-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'p-m-betrag', 'p-m-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -410,6 +410,39 @@ function vPinVerwaltung() {
    und ist mit dem Neuladen oder Wechsel der Seite weg; gemerkt wird nur die Händlernummer. Der Ablauf des Zugriffs
    steht an einer Stelle (sumupAnfrage), damit eine spätere Anbindung ihn wiederverwenden kann. */
 const SUMUP = 'https://api.sumup.com';
+/* ---------- Kartengerät: Zugangsdaten, Zahlung am Solo ----------
+   Ablauf: „An Solo senden“ schickt den Betrag an das gekoppelte Solo (POST …/readers/{id}/checkout, mit Trinkgeld-Prozenten,
+   die die Kundin am Gerät wählt). Danach fragt die Kasse alle 2,5 Sekunden die Zahlung ab (GET …/transactions?foreign_transaction_id=…)
+   und bucht bei „SUCCESSFUL“ Betrag und Trinkgeld, das SumUp meldet (tip_amount; amount enthält es). Eine Rückruf-Adresse (Webhook)
+   gibt es nicht – dafür bräuchte es einen Server. Fällt das Internet aus, bleibt das Eintippen am Gerät als Rückfall.
+   Zugangsdaten: API-Schlüssel und Affiliate-Schlüssel liegen nur VERSCHLÜSSELT im Browser (AES-GCM, Schlüssel aus einem eigenen Code per
+   PBKDF2), nie in S, nie in der Sicherung und nie im Google-Abgleich. Entschlüsselt stehen sie nur im Arbeitsspeicher (SU), bis die
+   Seite neu geladen wird. Händlernummer, App-ID und Gerät sind keine Geheimnisse und stehen offen. */
+const SU_ENC = 'sk-sumup-enc', SU_PEND = 'sk-sumup-pending';
+const SU = { key: '', aff: '' };
+const suEnc = encodeURIComponent;
+const suHex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+const suBytes = h => new Uint8Array((h.match(/../g) || []).map(x => parseInt(x, 16)));
+async function suSchluesselAus(pass, salz) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salz, iterations: 200000, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function suSpeichern(pass, daten) {
+  const salz = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await suSchluesselAus(pass, salz);
+  const c = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, new TextEncoder().encode(JSON.stringify(daten)));
+  lsSet(SU_ENC, JSON.stringify({ s: suHex(salz), i: suHex(iv), c: suHex(c) }));
+}
+async function suOeffnen(pass) {
+  try {
+    const e = JSON.parse(lsGet(SU_ENC)), k = await suSchluesselAus(pass, suBytes(e.s));
+    const t = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: suBytes(e.i) }, k, suBytes(e.c));
+    const d = JSON.parse(new TextDecoder().decode(t)); SU.key = d.key || ''; SU.aff = d.aff || ''; return !!SU.key;
+  } catch (x) { return false; }
+}
+const suDa = () => !!lsGet(SU_ENC), suOffen = () => !!SU.key;
+const suBereit = () => suDa() && !!lsGet('sk-sumup-reader') && !!lsGet('sk-sumup-code');
+const suRaten = () => (lsGet('sk-sumup-tips') || '5,10,15').split(/[ ,;]+/).map(x => +x / 100).filter(x => x >= 0.01 && x <= 0.99).sort((a, b) => a - b);
 async function sumupAnfrage(pfad, schluessel, optionen) {
   const t0 = Date.now();
   try {
@@ -424,14 +457,106 @@ async function sumupAnfrage(pfad, schluessel, optionen) {
     return { fehler: true, erreichbar, ms: Date.now() - t0 };
   }
 }
+const suFehlerText = r => r.fehler ? (r.erreichbar ? 'SumUp erreichbar, aber der Browser darf die Antwort nicht lesen (CORS).' : 'Keine Verbindung zu SumUp.')
+  : `SumUp meldet HTTP ${r.status}${r.json && (r.json.detail || r.json.message || r.json.title) ? ': ' + (r.json.detail || r.json.message || r.json.title) : ''}.`;
+
+// ---- Zahlung am Solo ----
+function suText(t) { if (U.suPay) U.suPay.text = t; const e = $('su-pay-text'); if (e) e.textContent = t; }
+function suEnde(phase, text) {
+  if (!U.suPay) return;
+  U.suPay.phase = phase; U.suPay.text = text; localStorage.removeItem(SU_PEND); behalte(); render();
+}
+function suErfolg(p, t) {
+  const gesamt = Math.round((+t.amount || 0) * 100), tip = Math.round((+t.tip_amount || 0) * 100), sch = S.sch.find(x => x.id === p.sch);
+  if (sch && !sch.zahl.some(z => z.ftid === p.ftid)) {   // nie doppelt buchen (Neuladen, zwei Wege zum selben Ergebnis)
+    const z = { id: id(), ma: sch.ma, gast: p.gast, betrag: gesamt - tip, tip, art: 'Karte', zeit: uhr(), ftid: p.ftid, ctid: t.transaction_code || t.id || '', solo: true };
+    if (p.b === 's') { z.kat = 'sauna'; z.tipAn = tip ? 'p:' + sch.ma : ''; } else { z.kat = 'massage'; z.masseur = p.masseur; z.tipAn = tip ? 'm:' + p.masseur : ''; }
+    sch.zahl.push(z); speichern();
+  }
+  localStorage.removeItem(SU_PEND);
+  U.suPay = { phase: 'ok', text: `Bezahlt: ${eur(gesamt)}${tip ? ` (davon Trinkgeld ${eur(tip)})` : ''}`, p }; behalte(); render();
+}
+async function suWarten(p) {
+  const code = lsGet('sk-sumup-code'), bis = p.t0 + 5 * 60000;
+  while (U.suPay && U.suPay.p && U.suPay.p.ftid === p.ftid && Date.now() < bis) {
+    await new Promise(r => setTimeout(r, 2500));
+    if (!U.suPay || !U.suPay.p || U.suPay.p.ftid !== p.ftid || U.suPay.phase === 'ok') return;
+    const r = await sumupAnfrage(`/v2.1/merchants/${suEnc(code)}/transactions?foreign_transaction_id=${suEnc(p.ftid)}`, SU.key);
+    if (!U.suPay || U.suPay.p.ftid !== p.ftid) return;
+    if (r.fehler) { suText('Keine Verbindung – ich versuche es weiter …'); continue; }
+    if (r.status === 404) { suText('Warte darauf, dass die Zahlung am Gerät gestartet wird …'); continue; }
+    if (!r.ok) { suEnde('fehler', suFehlerText(r)); return; }
+    const st = String((r.json && r.json.status) || '').toUpperCase();
+    if (st === 'SUCCESSFUL') { suErfolg(p, r.json); return; }
+    if (st === 'FAILED') { suEnde('fehler', 'Die Zahlung ist fehlgeschlagen.'); return; }
+    if (st === 'CANCELLED') { suEnde('fehler', 'Die Zahlung wurde abgebrochen.'); return; }
+    suText('Die Kundin zahlt am Gerät …');
+  }
+  if (U.suPay && U.suPay.p && U.suPay.p.ftid === p.ftid && U.suPay.phase !== 'ok') suEnde('fehler', 'Keine Rückmeldung vom Gerät innerhalb von 5 Minuten. Bitte am Gerät nachsehen und gegebenenfalls von Hand buchen.');
+}
+async function suSenden(b) {
+  const s = schicht(); if (!s || !U.gast || U.suPay) return;
+  const betrag = cent($v(`p-${b}-betrag`));
+  if (betrag <= 0) { alert('Bitte einen Betrag eingeben.'); return; }
+  if (b === 'm' && !U.mas) { alert('Bitte oben in der Zeile einen Masseur antippen.'); return; }
+  if (!suOffen()) { U.suEntsperren = { danach: () => suSenden(b) }; behalte(); render(); return; }
+  const code = lsGet('sk-sumup-code'), geraet = lsGet('sk-sumup-reader'), app = lsGet('sk-sumup-app'), ftid = 'olivin-' + id();
+  const p = { ftid, gast: U.gast, sch: s.id, b, masseur: b === 'm' ? U.mas : '', betrag, t0: Date.now() };
+  U.suPay = { phase: 'sende', text: 'Sende an das Kartengerät …', p }; behalte(); render();
+  const body = { total_amount: { currency: 'EUR', minor_unit: 2, value: betrag }, description: 'Olivin ' + (b === 's' ? 'Sauna' : 'Massage') };
+  if (SU.aff && app) body.affiliate = { key: SU.aff, app_id: app, foreign_transaction_id: ftid };
+  const raten = suRaten(); if (raten.length) { body.tip_rates = raten; body.tip_timeout = 60; }
+  const r = await sumupAnfrage(`/v0.1/merchants/${suEnc(code)}/readers/${suEnc(geraet)}/checkout`, SU.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!U.suPay || U.suPay.p.ftid !== ftid) return;
+  if (r.fehler || !r.ok) { suEnde('fehler', suFehlerText(r) + ' Es wurde nichts gebucht – bitte am Gerät eintippen.'); return; }
+  lsSet(SU_PEND, JSON.stringify(p)); suText('Bitte am Kartengerät bezahlen.'); behalte(); render();
+  suWarten(p);
+}
+function suWiederaufnahme() {   // Seite mitten in einer Zahlung neu geladen: weiter nachfragen
+  let p = null; try { p = JSON.parse(lsGet(SU_PEND) || 'null'); } catch (e) {}
+  if (!p || !suBereit()) return;
+  U.suPay = { phase: 'warte', text: 'Offene Kartenzahlung von vorhin – ich frage das Ergebnis ab.', p };
+  if (suOffen()) suWarten(p); else U.suEntsperren = { danach: () => suWarten(p) };
+}
+function suModale() {
+  let h = '';
+  if (U.suEntsperren) h += `<div class="modal" role="dialog" aria-label="Kartengerät entsperren"><div class="card sym" style="width:min(420px,100%)"><h2>Kartengerät entsperren</h2>
+    <div class="mut">Den Code eingeben, mit dem die Zugangsdaten verschlüsselt sind. Er wird einmal je Start der Kasse gebraucht.</div>
+    <div class="row"><input id="su-pass" type="password" size="22" placeholder="Code" autocomplete="off"><button class="p" data-act="suOk">Entsperren</button><button data-act="suAb">Abbrechen</button></div>
+    <div class="warn" id="su-pass-msg"></div></div></div>`;
+  if (U.suPay) {
+    const f = U.suPay.phase;
+    h += `<div class="modal" role="dialog" aria-label="Kartenzahlung"><div class="card sym" style="width:min(460px,100%);text-align:center">
+      <h2>${f === 'ok' ? 'Bezahlt' : f === 'fehler' ? 'Nicht bezahlt' : 'Kartenzahlung'}</h2>
+      <div class="grossbetrag" style="font-size:40px">${eur(U.suPay.p.betrag)}</div>
+      <div class="${f === 'ok' ? 'good' : f === 'fehler' ? 'warn' : 'mut'}" id="su-pay-text" style="margin:8px 0">${esc(U.suPay.text)}</div>
+      <div class="mut">${f === 'sende' || f === 'warte' ? 'Das Trinkgeld wählt die Kundin am Gerät.' : ''}</div>
+      <div class="row" style="justify-content:center"><button class="${f === 'ok' ? 'ok' : ''}" data-act="suZu">${f === 'ok' ? 'Weiter' : f === 'fehler' ? 'Schließen' : 'Abbrechen'}</button></div></div></div>`;
+  }
+  return h;
+}
 function vSumup() {
-  const code = lsGet('sk-sumup-code');
-  return `<div class="card"><h2>💳 Kartengerät (SumUp Solo) – Zugriffstest</h2>
-    <div class="mut">Prüft nur lesend, ob die Kasse SumUp erreicht und welche Kartengeräte gekoppelt sind. Es wird nichts bezahlt. Der Schlüssel wird nicht gespeichert – er gilt nur, bis die Seite neu geladen wird. Erzeugen Sie ihn im SumUp-Entwicklerbereich selbst und geben Sie ihn nur hier ein, nie weiter.</div>
+  const code = lsGet('sk-sumup-code'), geraet = lsGet('sk-sumup-reader'), gname = lsGet('sk-sumup-reader-name');
+  const krypto = !!(window.crypto && crypto.subtle);
+  return `<div class="card"><h2>💳 Kartengerät (SumUp Solo)</h2>
+    <div class="mut">Die Zugangsdaten erzeugen Sie im SumUp-Entwicklerbereich selbst (API-Schlüssel und Affiliate-Schlüssel). Sie werden nur verschlüsselt auf diesem Gerät gespeichert, nie in der Sicherung und nie im Google-Abgleich.</div>
     <div class="row"><input id="su-code" size="14" placeholder="Händlernummer" value="${esc(code)}" autocomplete="off" autocapitalize="characters">
-      <input id="su-key" type="password" size="30" placeholder="API-Schlüssel" autocomplete="new-password">
-      <button class="p" data-act="sumupTest">Zugriff testen</button></div>
-    <div id="su-erg" class="mut" style="margin-top:8px">Noch nicht getestet.</div></div>`;
+      <input id="su-key" type="password" size="28" placeholder="API-Schlüssel (sup_sk_…)" autocomplete="new-password"></div>
+    <div class="row"><button class="p" data-act="sumupTest">Zugriff testen</button></div>
+    <div id="su-erg" class="mut" style="margin-top:8px">Noch nicht getestet.</div></div>
+  <div class="card"><h2>Dauerhaft einrichten</h2>
+    <div class="mut">Gerät: <b>${geraet ? esc(gname || geraet) : 'noch keines gewählt (erst „Zugriff testen“, dann „Dieses Gerät verwenden“)'}</b> ·
+      Zugang: <b>${suDa() ? (suOffen() ? 'gespeichert, entsperrt' : 'gespeichert, gesperrt') : 'nicht gespeichert'}</b></div>
+    ${krypto ? '' : '<div class="warn">Dieser Browser kann nicht verschlüsseln (nur über https oder localhost). Speichern ist deshalb nicht möglich.</div>'}
+    <div class="row"><input id="su-aff" type="password" size="28" placeholder="Affiliate-Schlüssel" autocomplete="new-password">
+      <input id="su-app" size="16" placeholder="App-ID" value="${esc(lsGet('sk-sumup-app'))}" autocomplete="off"></div>
+    <div class="row"><input id="su-tips" size="14" placeholder="Trinkgeld-%" value="${esc(lsGet('sk-sumup-tips') || '5,10,15')}" title="Prozente, die die Kundin am Gerät zur Wahl hat, mit Komma getrennt; leer = kein Trinkgeld am Gerät">
+      <input id="su-pass" type="password" size="18" placeholder="Eigener Code (mind. 8 Zeichen)" autocomplete="new-password">
+      <input id="su-pass2" type="password" size="18" placeholder="Code wiederholen" autocomplete="new-password"></div>
+    <div class="row"><button class="p" data-act="suSpeichern">Verschlüsselt speichern</button>
+      ${suDa() && !suOffen() ? '<button data-act="suEntsperrenKnopf">Entsperren</button>' : ''}${suDa() ? '<button class="x" style="font-size:16px;padding:10px 14px" data-act="suLoeschen">Zugang löschen</button>' : ''}</div>
+    <div class="warn" id="su-msg"></div>
+    <div class="mut">Der API-Schlüssel aus dem Feld oben wird mitgespeichert. Den Code brauchen Sie einmal je Start der Kasse. Geht er verloren, löschen Sie den Zugang und tragen ihn neu ein.</div></div>`;
 }
 
 /* ---------- Anzeige ---------- */
@@ -446,7 +571,7 @@ function render() {
   const gesperrt = geschuetzt() && !entsperrt();
   if (geschuetzt() && pinGesetzt() && !gesperrt) U.frei = Date.now() + PIN_MIN;   // jede Bedienung verlängert
   const sperrKnopf = geschuetzt() && pinGesetzt() && !gesperrt ? '<div class="row noprint"><button data-act="sperren">🔒 Jetzt sperren</button></div>' : '';
-  $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm());
+  $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
   markiere(); uhrenAktualisieren(); kartenAnzeigen();
@@ -839,7 +964,8 @@ function zahlBlock(b, rest, titel, hinweis) {
     ${[5, 10, 15].map(c => `<button data-act="tipProz" data-b="${b}" data-v="${c}">${c} %</button>`).join('')}<button data-act="tipLeer" data-b="${b}">Kein</button></div>
   <div class="mut" id="p-${b}-hint">${hinweis}</div>
   <div class="gross" id="p-${b}-gross" hidden></div>
-  <div class="row" style="margin-top:8px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle${b === 's' ? 'S' : 'M'}">${b === 's' ? 'Sauna buchen' : 'Massage buchen'}</button></div></div>`;
+  <div class="row" style="margin-top:8px"><button class="ok" style="min-width:220px;min-height:56px;font-size:18px" data-act="zahle${b === 's' ? 'S' : 'M'}">${b === 's' ? 'Sauna buchen' : 'Massage buchen'}</button>
+    ${suBereit() && U.art === 'Karte' ? `<button class="p" style="min-height:56px;font-size:18px" data-act="suSenden" data-b="${b}" title="Betrag ans Solo schicken; das Trinkgeld wählt die Kundin dort">An Solo senden</button>` : ''}</div></div>`;
 }
 function vGast(s, k) {
   const go = s.gaeste.find(x => x.id === k);
@@ -1141,11 +1267,11 @@ const A = {
   // Zugriffstest: rein lesend (Liste der Kartengeräte). Zeigt, was angekommen ist – auch die Form der Antwort, damit die
   // spätere Anbindung nicht raten muss.
   sumupTest: () => {
-    const code = $v('su-code').trim().toUpperCase(), key = $v('su-key').trim(), e = $('su-erg');
+    const code = $v('su-code').trim().toUpperCase(), key = $v('su-key').trim() || SU.key, e = $('su-erg');
     if (!code || !key) { e.className = 'warn'; e.textContent = 'Bitte Händlernummer und API-Schlüssel eintragen.'; return false; }
     lsSet('sk-sumup-code', code);
     e.className = 'mut'; e.textContent = 'Teste …';
-    sumupAnfrage('/v0.1/merchants/' + encodeURIComponent(code) + '/readers', key).then(r => {
+    sumupAnfrage('/v0.1/merchants/' + suEnc(code) + '/readers', key).then(r => {
       const zeit = `<div class="mut">${r.ms} ms</div>`, roh = t => `<details><summary class="mut">Antwort anzeigen</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(t)}</pre></details>`;
       if (r.fehler) {
         e.className = 'warn';
@@ -1156,7 +1282,8 @@ const A = {
         const liste = (r.json && (r.json.items || (Array.isArray(r.json) ? r.json : null))) || [];
         e.className = 'good';
         e.innerHTML = `<b>Zugriff funktioniert.</b> ${liste.length ? liste.length + ' Kartengerät(e) gekoppelt:' : 'Noch kein Kartengerät gekoppelt (am Solo: Verbindungen → Cloud API → Verbinden).'}`
-          + (liste.length ? `<ul class="mut" style="color:var(--ink)">${liste.map(x => `<li>${esc(x.name || x.id || '?')} · Status ${esc(x.status || '?')}${x.device ? ' · ' + esc(x.device.model || '') + ' ' + esc(x.device.identifier || '') : ''}</li>`).join('')}</ul>` : '') + zeit + roh(JSON.stringify(r.json || r.text, null, 1));
+          + (liste.length ? `<ul style="color:var(--ink)">${liste.map(x => `<li>${esc(x.name || x.id || '?')} · Status ${esc(x.status || '?')}${x.device ? ' · ' + esc(x.device.model || '') + ' ' + esc(x.device.identifier || '') : ''}
+              <button data-act="suGeraet" data-v="${esc(x.id || '')}" data-n="${esc(x.name || x.id || '')}">Dieses Gerät verwenden</button></li>`).join('')}</ul>` : '') + zeit + roh(JSON.stringify(r.json || r.text, null, 1));
       } else {
         const hinweis = r.status === 401 ? 'Der Schlüssel wurde nicht angenommen.' : r.status === 403 ? 'Dem Schlüssel fehlt eine Berechtigung (zum Beispiel „payments“).' : r.status === 404 ? 'Händlernummer oder Adresse nicht gefunden – Händlernummer prüfen.' : 'SumUp hat den Aufruf abgelehnt.';
         e.className = 'warn';
@@ -1164,6 +1291,37 @@ const A = {
       }
     });
     return false;
+  },
+  suGeraet: (v, el) => { lsSet('sk-sumup-reader', v); lsSet('sk-sumup-reader-name', el.dataset.n || v); behalte(); },
+  // Verschlüsselt speichern: API-Schlüssel aus dem Testfeld (oder schon entsperrt) + Affiliate-Schlüssel + eigener Code
+  suSpeichern: () => {
+    const m = t => { const e = $('su-msg'); if (e) e.textContent = t; return false; };
+    if (!(window.crypto && crypto.subtle)) return m('Dieser Browser kann nicht verschlüsseln.');
+    const key = $v('su-key').trim() || SU.key, aff = $v('su-aff').trim() || SU.aff, app = $v('su-app').trim(), pass = $v('su-pass'), p2 = $v('su-pass2');
+    if (!key) return m('Bitte oben den API-Schlüssel eintragen.');
+    if (!aff || !app) return m('Bitte Affiliate-Schlüssel und App-ID eintragen (SumUp: Entwicklereinstellungen → Affiliate Keys).');
+    if (pass.length < 8) return m('Der Code braucht mindestens 8 Zeichen.');
+    if (pass !== p2) return m('Die beiden Codes sind verschieden.');
+    lsSet('sk-sumup-app', app); lsSet('sk-sumup-tips', $v('su-tips').trim());
+    suSpeichern(pass, { key, aff }).then(() => { SU.key = key; SU.aff = aff; behalte(); render(); const e = $('su-msg'); if (e) { e.className = 'good'; e.textContent = 'Gespeichert (verschlüsselt) und entsperrt.'; } });
+    return false;
+  },
+  suLoeschen: () => { if (!confirm('Zugang zu SumUp von diesem Gerät löschen?')) return false; localStorage.removeItem(SU_ENC); SU.key = ''; SU.aff = ''; },
+  suEntsperrenKnopf: () => { U.suEntsperren = { danach: () => {} }; behalte(); },
+  suOk: () => {
+    const pass = $v('su-pass'), e = U.suEntsperren; if (!e) return false;
+    suOeffnen(pass).then(ok => {
+      if (!ok) { const m = $('su-pass-msg'); if (m) m.textContent = 'Der Code stimmt nicht.'; return; }
+      const danach = e.danach; U.suEntsperren = null; behalte(); render(); if (danach) danach();
+    });
+    return false;
+  },
+  suAb: () => { U.suEntsperren = null; behalte(); },
+  suSenden: (v, el) => { suSenden(el.dataset.b); return false; },
+  suZu: () => {
+    const f = U.suPay && U.suPay.phase;
+    if ((f === 'sende' || f === 'warte') && !confirm('Die Zahlung wird dann nicht mehr verfolgt. Geht sie am Gerät trotzdem durch, bitte von Hand buchen. Wirklich abbrechen?')) return false;
+    U.suPay = null; localStorage.removeItem(SU_PEND);
   },
   pinEntfernen: () => {
     if (!confirm('PIN entfernen? Abrechnung und Stammdaten sind danach wieder für jeden offen.')) return false;
@@ -1395,6 +1553,7 @@ document.addEventListener('change', e => {
   } else if (el.tagName === 'SELECT' && el.dataset.act) { A[el.dataset.act](); render(); }
 });
 render();
+suWiederaufnahme(); if (U.suPay || U.suEntsperren) render();
 </script>
 </body>
 </html>

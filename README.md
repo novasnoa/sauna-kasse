@@ -38,6 +38,14 @@ Der Eintritt gilt 4 Stunden. Für jede angebrochene Stunde danach bucht die Kass
 oben in der Gastkarte steht „n × Verlängerung gebucht“. Preis und Name kommen aus der Leistung „Verlängerung“ (Stammdaten → Services) –
 ohne sie bucht die Kasse nichts und zeigt einen Hinweis. Beim „Gast geht“ zählt die zuletzt angebrochene Stunde noch mit.
 
+## Kartengerät (SumUp Solo)
+
+Stammdaten → „Kartengerät“: Zugriffstest, Gerät wählen, Zugang einrichten (API-Schlüssel, Affiliate-Schlüssel, App-ID, eigener Code).
+Die Schlüssel liegen nur verschlüsselt auf dem Gerät (AES-GCM), nie in der Sicherung oder im Google-Abgleich; der Code wird einmal je Start der Kasse
+gebraucht. Im Zahlblock (Zahlart Karte) gibt es dann „An Solo senden“: Betrag ans Solo, Trinkgeld wählt die Kundin dort (Prozente einstellbar),
+die Kasse fragt das Ergebnis ab (alle 2,5 s, bis 5 Minuten) und bucht Betrag und Trinkgeld. Kein Webhook, kein Server. Bei Fehler oder Ausfall
+bleibt das Eintippen am Gerät. Noch nicht an einem echten Solo erprobt.
+
 ## Kartenzahlung
 
 Bei Zahlart „Karte“ steht im Zahlblock der Betrag groß (Betrag + Trinkgeld), damit man ihn am Kartengerät nur abtippt.
