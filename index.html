@@ -86,21 +86,24 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .stat.off{color:var(--warn)}.stat.bez{color:var(--ok)}
 tr.zoffen td{background:#fdf3f1}
 /* Hauptseite: oben die Kacheln der drei Rubriken nebeneinander, darunter die Abrechnung des Gastes */
-.rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 18px;align-items:start;margin-bottom:6px}
-.grid.kach{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:10px}
+.rubriken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 18px;align-items:start;margin-bottom:10px}
+.grid.kach{grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px}
+/* Drei Rubriken als getönte Felder mit farbigem Kopf – gleiche Farben wie die Symbole der Kacheln (Leistung braun, Massage grün, Ware grau) */
+.rub{border-radius:14px;padding:8px 12px 14px;border-top:5px solid var(--rf);background:var(--rg);box-shadow:0 1px 3px #0000001a}
+.rub:nth-child(1){--rf:#8a4b1f;--rg:#fbf5ee;--n:2}.rub:nth-child(2){--rf:#0F6E56;--rg:#edf7f3;--n:1}.rub:nth-child(3){--rf:#5F5E5A;--rg:#f0f0ee;--n:3}
+.rub h3{margin:4px 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--rf)}
 /* Querformat: Leistungen 2 Spalten, Massagen 1, Waren 3 – nebeneinander, Breite im Verhältnis der Spalten (2 : 1 : 3). Hochformat bleibt wie es war. */
 @media (orientation:landscape) and (min-width:900px){
-  .rubriken{grid-template-columns:2fr 1fr 3fr}
-  .rub:nth-child(1) .grid.kach{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .rub:nth-child(2) .grid.kach{grid-template-columns:minmax(0,1fr)}
-  .rub:nth-child(3) .grid.kach{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rubriken{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .rub{flex:0 1 auto;min-width:0}
+  .rub .grid.kach{grid-template-columns:repeat(var(--n),minmax(0,150px))}
 }
-.grid button.kachel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;min-height:132px;padding:12px 8px;font-size:18px;line-height:1.15}
-.kachel .kn{word-break:break-word;font-weight:500}
-.kachel small{margin-top:1px;font-size:14px}
-.kachel .st{font-size:12px;font-weight:600}
+.grid button.kachel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;min-height:112px;padding:10px 6px;font-size:15px;line-height:1.15}
+.kachel .kn{overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;font-weight:500}   /* lange Namen trennen sauber statt mitten im Wort zu brechen */
+.kachel small{margin-top:1px;font-size:12px}
+.kachel .st{font-size:10.5px;font-weight:600}
 /* Stand für den gewählten Gast: Zähler oben rechts; Farbe: offen rot, teilweise bezahlt gelb, bezahlt grün */
-.kachel .zahl{position:absolute;top:6px;right:6px;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--warn);color:#fff;font-size:15px;font-weight:700;line-height:26px}
+.kachel .zahl{position:absolute;top:5px;right:5px;min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:var(--warn);color:#fff;font-size:13px;font-weight:700;line-height:22px}
 .kachel.offen{background:#fde8e4;border-color:var(--warn)}.kachel.offen .st{color:var(--warn)}
 .kachel.teil{background:#fbf0dc;border-color:#b7791f}.kachel.teil .zahl{background:#b7791f}.kachel.teil .st{color:#8a5a12}
 .kachel.bezahlt{background:#e6f3ea;border-color:var(--ok)}.kachel.bezahlt .zahl{background:var(--ok)}.kachel.bezahlt .st{color:var(--ok)}
@@ -389,7 +392,7 @@ function kachelStand(buch, bez, l, massage) {
 const kachel = (l, k, kl, st) => {
   const txt = st ? (st.stand === 'bezahlt' ? 'bezahlt' : st.stand === 'offen' ? 'offen' : `${st.einheiten} von ${st.n} bezahlt`) : '';
   return `<button class="kachel ${kl}${kl === 'm' ? ' mass' : ''}${st ? ' ' + st.stand : ''}" data-act="buche" data-k="${k}" data-v="${l.id}"${st ? ` title="${st.n}× gebucht, ${txt}"` : ''}>
-    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40, fluessigkeit(l))}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
+    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 34, fluessigkeit(l))}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
 };
 // Auswahl in den Stammdaten: alle Symbole der Sammlung, nach Gruppen, mit Suche (filtert im Dokument, ohne Neuzeichnen)
 function vSymbole(aktuell) {
