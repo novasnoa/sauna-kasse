@@ -218,7 +218,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'p-m-betrag', 'p-m-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'p-m-betrag', 'p-m-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -543,13 +543,18 @@ function vSumup() {
     <div class="row"><input id="su-code" size="14" placeholder="Händlernummer" value="${esc(code)}" autocomplete="off" autocapitalize="characters">
       <input id="su-key" type="password" size="28" placeholder="API-Schlüssel (sup_sk_…)" autocomplete="new-password"></div>
     <div class="row"><button class="p" data-act="sumupTest">Zugriff testen</button></div>
-    <div id="su-erg" class="mut" style="margin-top:8px">Noch nicht getestet.</div></div>
+    <div id="su-erg" class="mut" style="margin-top:8px">Noch nicht getestet.</div>
+    <h3>Solo koppeln</h3>
+    <div class="mut">Am Solo: Verbindungen → Cloud API → Verbinden. Das Gerät zeigt einen Kopplungscode (8 bis 9 Zeichen, gilt etwa 5 Minuten). Den hier eintragen, dann am Gerät bestätigen.</div>
+    <div class="row"><input id="su-pair" size="12" placeholder="Kopplungscode" autocomplete="off" autocapitalize="characters"><input id="su-gname" size="14" placeholder="Name" value="Tresen" autocomplete="off">
+      <button class="p" data-act="suKoppeln">Gerät koppeln</button></div>
+    <div id="su-kopp" class="mut"></div></div>
   <div class="card"><h2>Dauerhaft einrichten</h2>
     <div class="mut">Gerät: <b>${geraet ? esc(gname || geraet) : 'noch keines gewählt (erst „Zugriff testen“, dann „Dieses Gerät verwenden“)'}</b> ·
       Zugang: <b>${suDa() ? (suOffen() ? 'gespeichert, entsperrt' : 'gespeichert, gesperrt') : 'nicht gespeichert'}</b></div>
     ${krypto ? '' : '<div class="warn">Dieser Browser kann nicht verschlüsseln (nur über https oder localhost). Speichern ist deshalb nicht möglich.</div>'}
     <div class="row"><input id="su-aff" type="password" size="28" placeholder="Affiliate-Schlüssel" autocomplete="new-password">
-      <input id="su-app" size="16" placeholder="App-ID" value="${esc(lsGet('sk-sumup-app'))}" autocomplete="off"></div>
+      <input id="su-app" size="30" placeholder="App-ID" value="${esc(lsGet('sk-sumup-app'))}" autocomplete="off"></div>
     <div class="row"><input id="su-tips" size="14" placeholder="Trinkgeld-%" value="${esc(lsGet('sk-sumup-tips') || '5,10,15')}" title="Prozente, die die Kundin am Gerät zur Wahl hat, mit Komma getrennt; leer = kein Trinkgeld am Gerät">
       <input id="su-pass" type="password" size="18" placeholder="Eigener Code (mind. 8 Zeichen)" autocomplete="new-password">
       <input id="su-pass2" type="password" size="18" placeholder="Code wiederholen" autocomplete="new-password"></div>
@@ -1289,6 +1294,25 @@ const A = {
         e.className = 'warn';
         e.innerHTML = `<b>HTTP ${r.status}:</b> ${hinweis}` + zeit + roh(JSON.stringify(r.json || r.text, null, 1));
       }
+    });
+    return false;
+  },
+  // Kopplung: POST …/readers mit dem Code vom Gerät (laut SumUp: Rechte readers.write; Antwort: Reader mit id, Status processing → paired,
+  // sobald das Gerät bestätigt). Bei Erfolg wird das neue Gerät gleich als das zu verwendende gemerkt.
+  suKoppeln: () => {
+    const code = $v('su-code').trim().toUpperCase(), key = $v('su-key').trim() || SU.key, pc = $v('su-pair').trim().toUpperCase().replace(/\s+/g, ''), name = $v('su-gname').trim() || 'Tresen', e = $('su-kopp');
+    if (!code || !key) { e.className = 'warn'; e.textContent = 'Bitte oben Händlernummer und API-Schlüssel eintragen.'; return false; }
+    if (!/^[A-Z0-9]{8,9}$/.test(pc)) { e.className = 'warn'; e.textContent = 'Der Kopplungscode hat 8 oder 9 Zeichen (Buchstaben und Ziffern).'; return false; }
+    lsSet('sk-sumup-code', code); e.className = 'mut'; e.textContent = 'Koppele …';
+    sumupAnfrage('/v0.1/merchants/' + suEnc(code) + '/readers', key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pairing_code: pc, name }) }).then(r => {
+      if (r.fehler || !r.ok) {
+        const hinweis = r.status === 404 ? 'Kein wartendes Gerät für diesen Code – ist er abgelaufen? Am Solo einen neuen erzeugen.' : r.status === 409 ? 'Das Gerät ist schon gekoppelt oder wartet nicht mehr.' : r.status === 403 ? 'Dem Schlüssel fehlt die Berechtigung zum Koppeln (readers.write).' : suFehlerText(r);
+        e.className = 'warn'; e.innerHTML = `<b>Nicht gekoppelt.</b> ${esc(hinweis)}` + (r.text ? `<details><summary class="mut">Antwort anzeigen</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(r.text)}</pre></details>` : '');
+        return;
+      }
+      const g = r.json || {}; if (g.id) { lsSet('sk-sumup-reader', g.id); lsSet('sk-sumup-reader-name', g.name || name); }
+      e.className = 'good';
+      e.innerHTML = `<b>Kopplung angelegt</b> (Status ${esc(g.status || '?')}). Bitte jetzt <b>am Gerät bestätigen</b>. Danach „Zugriff testen“: Der Status muss auf <b>paired</b> stehen.<details><summary class="mut">Antwort anzeigen</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(JSON.stringify(g, null, 1))}</pre></details>`;
     });
     return false;
   },
