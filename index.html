@@ -249,7 +249,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -316,7 +316,59 @@ function symbolFuer(l, k) {
   const n = symNorm(l.name), r = SYMBOL_STICH.find(([re]) => re.test(n));
   return r && ICONS[r[1]] ? r[1] : (k === 'war' ? 'shopping-bag' : 'tag');
 }
-const ikone = (n, g) => ICONS[n] ? `<svg class="ic" viewBox="0 0 24 24" width="${g || 28}" height="${g || 28}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>` : '';
+// Flüssigkeit in Gläsern: Je Getränkesymbol steht hier die Innenform (clip) und die Füllhöhe (y). Die Farbe wird hinter die
+// Linien gemalt und an der Innenform abgeschnitten – so füllt sie genau das Glas, ohne die Symbole selbst zu verändern.
+const LIQ = {
+  'beer': { clip: 'M9 21h6a1 1 0 0 0 1 -1v-3.625c0 -1.397 .29 -2.775 .845 -4.025l.31 -.7c.556 -1.25 .845 -2.253 .845 -3.65v-4a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1v4c0 1.397 .29 2.4 .845 3.65l.31 .7a9.931 9.931 0 0 1 .845 4.025v3.625a1 1 0 0 0 1 1z', y: 8, top: 3 },
+  'glass-full': { clip: 'M17 3l1 7c0 3.012 -2.686 5 -6 5s-6 -1.988 -6 -5l1 -7h10z', y: 10 },
+  'glass': { clip: 'M17 5l1 6c0 3.012 -2.686 5 -6 5s-6 -1.988 -6 -5l1 -6z', y: 8 },
+  'glass-gin': { clip: 'M5.75 4.5c-.612 .75 -.75 2 -.75 3.5a7 7 0 0 0 14 0c0 -1.5 -.094 -2.75 -.75 -3.5z', y: 7 },
+  'glass-champagne': { clip: 'M8 5c0 6.075 1.79 11 4 11s4 -4.925 4 -11z', y: 7 },
+  'glass-cocktail': { clip: 'M5 5v.388c0 .432 .126 .853 .362 1.206l5 7.509c.633 .951 1.88 1.183 2.785 .517c.191 -.141 .358 -.316 .491 -.517l5 -7.509c.236 -.353 .362 -.774 .362 -1.206v-.388z', y: 7 },
+  'bottle': { clip: 'M14 3.5c0 1.626 .507 3.212 1.45 4.537l.05 .07a8.093 8.093 0 0 1 1.5 4.694v6.199a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-6.2c0 -1.682 .524 -3.322 1.5 -4.693l.05 -.07a7.823 7.823 0 0 0 1.45 -4.537z', y: 9 },
+  'droplet': { clip: 'M7.502 19.423c2.602 2.105 6.395 2.105 8.996 0c2.602 -2.105 3.262 -5.708 1.566 -8.546l-4.89 -7.26c-.42 -.625 -1.287 -.803 -1.936 -.397a1.376 1.376 0 0 0 -.41 .397l-4.893 7.26c-1.695 2.838 -1.035 6.441 1.567 8.546z', y: 3 },
+  'cup': { clip: 'M17.5 11l-1.5 10h-8l-1.5 -10z', y: 12 },
+  'coffee': { clip: 'M3 10h14v5a6 6 0 0 1 -6 6h-2a6 6 0 0 1 -6 -6v-5z', y: 11 },
+  'mug': { clip: 'M4.083 5h10.834a1.08 1.08 0 0 1 1.083 1.077v8.615c0 2.38 -1.94 4.308 -4.333 4.308h-4.334c-2.393 0 -4.333 -1.929 -4.333 -4.308v-8.615a1.08 1.08 0 0 1 1.083 -1.077z', y: 8 },
+  'milk': { clip: 'M16 6l1.094 1.759a6 6 0 0 1 .906 3.17v8.071a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-8.071a6 6 0 0 1 .906 -3.17l1.094 -1.759z', y: 9 }
+};
+// Farben der Getränke; „s“ ist der Schaum (nur beim Bier)
+const FLUESSIG = {
+  bier: { n: 'Bier', c: '#E39B16', s: '#FFF3CF' }, radler: { n: 'Radler', c: '#EBC43C', s: '#FFF4D2' },
+  cola: { n: 'Cola', c: '#4A2511' }, wasser: { n: 'Wasser', c: '#9ED3F0' }, orange: { n: 'Orange', c: '#F28C1E' },
+  apfel: { n: 'Apfelsaft', c: '#D9A63F' }, schorle: { n: 'Schorle', c: '#E6C84F' }, limo: { n: 'Limo / Zitrone', c: '#D9E85F' },
+  tee: { n: 'Tee', c: '#B8651B' }, eistee: { n: 'Eistee', c: '#C9822B' }, kaffee: { n: 'Kaffee', c: '#5B3A29' }, kakao: { n: 'Kakao', c: '#6B4226' },
+  milch: { n: 'Milch', c: '#FDF6EC' }, rotwein: { n: 'Rotwein', c: '#8E1B3A' }, weisswein: { n: 'Weißwein', c: '#E8DA7E' }, rose: { n: 'Rosé', c: '#F4A6B7' },
+  sekt: { n: 'Sekt', c: '#EBD86A' }, aperol: { n: 'Aperol', c: '#F26B1D' }, hugo: { n: 'Hugo', c: '#DCE79A' }, klar: { n: 'Klar (Gin, Wodka)', c: '#DDEBF0' },
+  whisky: { n: 'Whisky / Rum', c: '#B9701A' }, trauben: { n: 'Traubensaft', c: '#6B2A5E' }, rotsaft: { n: 'Roter Saft', c: '#B3213B' },
+  tomate: { n: 'Tomatensaft', c: '#C0392B' }, saft: { n: 'Saft (gelb-orange)', c: '#F2A33A' }, energy: { n: 'Energy', c: '#E4E04F' }, ginger: { n: 'Ginger Ale', c: '#E0B34A' }
+};
+// Erste passende Regel gilt. Namen werden ohne Umlaute und Groß/Klein verglichen (symNorm).
+const FL_REGEL = [
+  [/radler|alster|panasch/, 'radler'], [/bier|pils|weizen|helles|export|malz/, 'bier'], [/schorle/, 'schorle'], [/apfel/, 'apfel'],
+  [/orange|fanta|o-?saft/, 'orange'], [/ginger/, 'ginger'], [/zitron|lemon|sprite|7 ?up|limo|zitrus/, 'limo'],
+  [/cola|coca|pepsi|spezi|mezzo/, 'cola'], [/energy|red ?bull|monster/, 'energy'], [/eistee|ice ?tea/, 'eistee'],
+  [/kaffee|espresso|cappuccino|cafe|latte|macchiato/, 'kaffee'], [/kakao|schoko/, 'kakao'], [/milch/, 'milch'],
+  [/tee(?![a-z])|kamille|kraeuter|pfefferminz|ingwer/, 'tee'], [/rose(?![a-z])|rosewein/, 'rose'],
+  [/wei[sß]+wein|riesling|chardonnay|grauburgunder|silvaner|wei[sß]/, 'weisswein'], [/aperol|spritz/, 'aperol'], [/hugo/, 'hugo'],
+  [/sekt|prosecco|champagner|secco|cremant/, 'sekt'], [/\bgin\b|tonic|wodka|vodka|korn|schnaps/, 'klar'], [/whisky|whiskey|cognac|\brum\b|weinbrand/, 'whisky'],
+  [/rotwein|merlot|lemberger|trollinger|cabernet|wein/, 'rotwein'], [/traube/, 'trauben'], [/kirsch|johannisbeer|himbeer|granatapfel|cranberry/, 'rotsaft'],
+  [/tomat/, 'tomate'], [/multi|mango|maracuja|ananas|pfirsich|saft/, 'saft'], [/wasser|mineral|sprudel|still|medium|aqua/, 'wasser']
+];
+function fluessigkeit(l) {
+  if (l.fl === 'none') return null;
+  if (l.fl && FLUESSIG[l.fl]) return FLUESSIG[l.fl];
+  const n = symNorm(l.name), r = FL_REGEL.find(([re]) => re.test(n));
+  return r ? FLUESSIG[r[1]] : null;
+}
+let clipZaehler = 0;
+const ikone = (n, g, fl) => {
+  if (!ICONS[n]) return '';
+  const q = fl && LIQ[n], id = 'lq' + (++clipZaehler);
+  const fuell = q ? `<defs><clipPath id="${id}"><path d="${q.clip}"/></clipPath></defs><g clip-path="url(#${id})" stroke="none">
+    <rect x="0" y="${q.y}" width="24" height="24" fill="${fl.c}"/>${fl.s && q.top ? `<rect x="0" y="${q.top}" width="24" height="${q.y - q.top}" fill="${fl.s}"/>` : ''}</g>` : '';
+  return `<svg class="ic" viewBox="0 0 24 24" width="${g || 28}" height="${g || 28}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${fuell}${ICONS[n]}</svg>`;
+};
 // Bezahlt je Buchungszeile eines Gastes: Es gibt eine gemeinsame Zahlung; sie deckt die Zeilen der Reihe nach (älteste zuerst).
 // Rein zur Anzeige auf den Kacheln und in der Liste; Summen und Offen rechnet gastSumme.
 function zahlVerteilung(s, k) {
@@ -337,7 +389,7 @@ function kachelStand(buch, bez, l, massage) {
 const kachel = (l, k, kl, st) => {
   const txt = st ? (st.stand === 'bezahlt' ? 'bezahlt' : st.stand === 'offen' ? 'offen' : `${st.einheiten} von ${st.n} bezahlt`) : '';
   return `<button class="kachel ${kl}${kl === 'm' ? ' mass' : ''}${st ? ' ' + st.stand : ''}" data-act="buche" data-k="${k}" data-v="${l.id}"${st ? ` title="${st.n}× gebucht, ${txt}"` : ''}>
-    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40)}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
+    ${st ? `<span class="zahl">${st.n}</span>` : ''}${ikone(symbolFuer(l, k), 40, fluessigkeit(l))}<span class="kn">${esc(l.name)}</span><small>${eur(l.preis)}</small>${st ? `<small class="st">${txt}</small>` : ''}</button>`;
 };
 // Auswahl in den Stammdaten: alle Symbole der Sammlung, nach Gruppen, mit Suche (filtert im Dokument, ohne Neuzeichnen)
 function vSymbole(aktuell) {
@@ -1231,10 +1283,11 @@ function vStamm() {
   const rm = g.id === 'mss' ? 'm' : g.id === 'srv' ? 'l' : 'w';
   const pf = (x, n) => g.k === 'lei' || g.k === 'war' ? `<button data-act="rang" data-k="${g.k}" data-v="${x.id}" data-m="${rm}" data-r="-1" title="Nach oben" ${n === 0 ? 'disabled' : ''}>▲</button> <button data-act="rang" data-k="${g.k}" data-v="${x.id}" data-m="${rm}" data-r="1" title="Nach unten" ${n === liste.length - 1 ? 'disabled' : ''}>▼</button> ` : '';
   const editZeile = x => `<tr><td colspan="3"><div class="row">${g.f.map(([f, l]) => `<input id="e-${f}" placeholder="${l}" ${FELDTYP[f] || ''} value="${esc(f === 'preis' ? (x.preis / 100).toFixed(2).replace('.', ',') : (x[f] || ''))}">`).join('')}
-    ${g.k === 'lei' || g.k === 'war' ? `<button data-act="symOeffnen" data-ziel="edit" title="Symbol wählen">${ikone(symbolFuer({ ...x, icon: U.editIcon }, g.k), 22)} Symbol ▾</button>` : ''}
+    ${g.k === 'lei' || g.k === 'war' ? `<button data-act="symOeffnen" data-ziel="edit" title="Symbol wählen">${ikone(symbolFuer({ ...x, icon: U.editIcon }, g.k), 22, fluessigkeit(x))} Symbol ▾</button>` : ''}
+    ${g.k === 'war' ? `<select id="e-fl" title="Farbe der Flüssigkeit im Glas"><option value="">Farbe: automatisch</option><option value="none" ${x.fl === 'none' ? 'selected' : ''}>Farbe: keine</option>${Object.entries(FLUESSIG).map(([k, v]) => `<option value="${k}" ${x.fl === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select>` : ''}
     <button class="ok" data-act="aendSave" data-g="${g.id}" data-v="${x.id}">Speichern</button> <button data-act="aendAb">Abbrechen</button></div></td></tr>`;
   return tabs + `<div class="card"><h2>${g.t}</h2>
-  <table>${liste.map((x, n) => U.edit === x.id ? editZeile(x) : `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : (g.k === 'lei' || g.k === 'war' ? `<span class="symklein">${ikone(symbolFuer(x, g.k), 22)}</span> ` : '') + esc(x.name)}
+  <table>${liste.map((x, n) => U.edit === x.id ? editZeile(x) : `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : (g.k === 'lei' || g.k === 'war' ? `<span class="symklein">${ikone(symbolFuer(x, g.k), 22, fluessigkeit(x))}</span> ` : '') + esc(x.name)}
       ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}${x.adresse ? `<div class="mut">🏠 ${esc(x.adresse)}</div>` : ''}</td>
     <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
     <td class="r">${pf(x, n)}<button data-act="aendern" data-g="${g.id}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
@@ -1528,6 +1581,7 @@ const A = {
     const g = STAMM.find(x => x.id === el.dataset.g), o = S[g.k].find(x => x.id === v);
     for (const [f] of g.f) { const e = $('e-' + f); o[f] = f === 'preis' ? cent(e.value) : e.value.trim(); }
     if (g.k === 'lei' || g.k === 'war') { if (U.editIcon) o.icon = U.editIcon; else delete o.icon; }
+    if (g.k === 'war') { const f = $v('e-fl'); if (f) o.fl = f; else delete o.fl; }
     U.edit = null; U.editIcon = '';
   },
   // Symbol-Auswahl in den Stammdaten; angefangene Eingaben bleiben stehen (behalte).
