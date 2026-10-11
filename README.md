@@ -8,13 +8,14 @@ Ordnet Einnahmen zu, macht keine fertige Buchhaltung: eher Excel-Tabelle mit Ein
 - Schlüssel werden beim Gehen des Gastes wieder frei und können neu vergeben werden (belegte sind gesperrt)
 - Tablet/Touch: große Bedienflächen, freie Schlüssel per Antippen, Zahlart/Trinkgeld per Tippen, zweispaltig im Querformat
 - Kunden je Schicht, Leistungen/Waren buchen, Massagen dem Masseur zuordnen
-- Mehrere Teilzahlungen (Bar/Karte/Sonstiges); zwei Zahlblöcke je Gast: „Sauna buchen“ (Trinkgeld an den Mitarbeiter an der Kasse) und „Massage buchen“ (Trinkgeld an den gewählten Masseur, der die Massage selbst verkauft); dazu „Sonstiges Trinkgeld“ (Popup: Betrag, gleichmäßig auf angewählte Mitarbeiter und Masseure verteilt)
+- Mehrere Teilzahlungen (Bar/Karte/Sonstiges); eine gemeinsame Zahlung je Gast „Zahlung buchen“ (die Sauna nimmt alles zusammen ein; Trinkgeld anteilig: Massage-Anteil an die Masseure, Rest an die Kasse); dazu „Sonstiges Trinkgeld“ (Popup: Betrag, gleichmäßig auf angewählte Mitarbeiter und Masseure verteilt)
 - Getrennte Abrechnung je Masseur (Massagen + Trinkgeld-Anteil, mit Unterschriftszeile)
 - Abrechnungen per E-Mail (mailto:) an die hinterlegten Adressen: Gesamtabrechnung an die Kasse, Masseur-Abrechnung an den Masseur
-- Abrechnung in zwei Teilen: **Abrechnung Sauna** (alles außer den Massagen; unten die Massagen mit der Miete, „In Rechnung zu stellen“)
-  und **Abrechnung Massage** (je Masseur, mit der Miete als Vermerk)
-- Miete: Für jede Massage zählen 30 % des Preises (ohne Trinkgeld) als Saunaeinnahme. In der Gesamtabrechnung steht sie bei den Saunaeinnahmen,
-  in der Masseur-Abrechnung als Vermerk unter der Summe (wird später per Rechnung bezahlt, nicht abgezogen); der Satz steht in `MIETE_PROZENT`
+- Abrechnung in zwei Teilen: **Abrechnung Sauna** (alle Einnahmen und Trinkgelder; Umsatz je Leistung/Ware; die Massagen mit den Rechnungen der Masseure
+  über 70 % und dem, was der Sauna bleibt) und **Abrechnung Massage** (je Masseur: seine Massagen, Trinkgeld, „Rechnung an die Sauna: 70 %“)
+- Massagen: Die Masseure stellen der Sauna 70 % des Massagepreises (ohne Trinkgeld) in Rechnung, 30 % bleiben der Sauna; gerechnet je Buchungszeile,
+  gerundet auf Cent; der Satz steht in `MASSEUR_PROZENT`. Früher verkauften die Masseure selbst und zahlten 30 % Miete – alte Zahlungen mit Zuordnung
+  (`kat`) zählen in der Abrechnung weiter mit.
 - Abrechnung je Schicht oder Tag zum Drucken (Zahlungsarten, Umsatz, Masseure, Trinkgeld, offene Beträge)
 
 Daten liegen im Browser (localStorage) – unter Stammdaten → Sicherung regelmäßig herunterladen.
@@ -55,10 +56,9 @@ Das Gerät ist nicht angebunden: es läuft für sich (z. B. SumUp Solo mit eigen
 
 5 % / 10 % / 15 % vom Betrag der Zahlung (ist er leer: vom Gesamtbetrag des Gastes) oder freie Summe im Feld.
 
-Es gibt keine Verteilungsrechnung mehr: Die Massagen verkaufen die Masseure selbst, der Tresen nimmt nur das Geld.
-Trinkgeld beim **Sauna buchen** geht an den Mitarbeiter an der Kasse, beim **Massage buchen** an den Masseur, der oben in der
-Gastzeile gewählt ist. Wer anders verteilen will, bucht **Sonstiges Trinkgeld**: ein Popup mit Betrag und Zahlart; die Summe geht
-gleichmäßig an die angewählten Mitarbeiter und Masseure (übrige Cent der Reihe nach an die ersten).
+Es gibt nur eine gemeinsame Zahlung je Gast; die Trennung Sauna/Massage geschieht erst in der Abrechnung. Das Trinkgeld der Zahlung wird anteilig
+nach dem Massage-Anteil verteilt (je Masseur sein Anteil am Gebuchten, der Rest an den Mitarbeiter an der Kasse). Wer anders verteilen will, bucht
+**Sonstiges Trinkgeld**: ein Popup mit Betrag und Zahlart; die Summe geht gleichmäßig an die angewählten Mitarbeiter und Masseure (übrige Cent der Reihe nach an die ersten).
 
 ## Abgleich über Google (mehrere Geräte)
 
