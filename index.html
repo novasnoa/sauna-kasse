@@ -71,6 +71,23 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 button.k4.mt{cursor:pointer;font-weight:600}
 .k4.mt.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .k4.go{margin-left:auto}
+/* Neue Kopfzeile der Gastkarte – eine Leiste, alles gleich hoch: links der Schlüssel mit großer Nummer, dann die Masseure als
+   eine zusammenhängende Auswahl, ganz rechts das Symbol „Gast geht“ und die 4-Stunden-Uhr. */
+.kopf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#faf6f1;border:1px solid var(--line);border-radius:18px}
+.kopf .k4{height:52px;min-height:52px;border-radius:26px;font-size:18px}
+.kopf-key{gap:8px;padding:0 22px 0 14px}
+.kopf-key .knr{font-size:32px;font-weight:700;line-height:1;letter-spacing:.5px}
+.kopf-key .kname{font-size:15px;font-weight:500;opacity:.8}
+.kopf-key .ic{flex:none}
+.mgruppe{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid var(--line);border-radius:30px;background:#fff}
+.mgruppe .mic{display:inline-flex;padding:0 4px 0 12px;color:#0F6E56}
+.mgruppe .k4{height:46px;min-height:46px;border:none;background:transparent;font-size:17px}
+.mgruppe .k4.mt.on{background:var(--acc);color:#fff}
+.kopf-re{margin-left:auto;display:flex;align-items:center;gap:10px}
+.k4.exit{width:60px;padding:0;justify-content:center;color:var(--warn);border:2px solid var(--warn);background:#fff}
+.k4.timer{gap:8px;padding:0 20px 0 14px;min-width:150px;justify-content:center}
+.k4.timer .tt{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.pie{vertical-align:-6px;margin-left:8px;flex:none}
 /* Der Solo-Knopf zeigt den Stand der Zahlung: blau bereit, gelb (pulsiert) gesendet, grün bezahlt, rot nicht bezahlt */
 .sbtn{min-width:260px;min-height:56px;font-size:18px;font-weight:600;color:#fff;border:0;border-radius:10px}
 .sbtn.bereit{background:#2563a8}
@@ -657,7 +674,7 @@ function gLeiste() {
   const weg = off.reduce((n, x) => n + x.gaeste.filter(g => !g.da).length, 0);
   // Mit dem offenen Betrag wie früher die Karte in der Kasse: so sieht man beim Wählen, wer noch zahlen muss.
   const chip = (x, sch) => { const t = gastSumme(sch, x.id);
-    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? `<span class="rest" data-ts="${x.ts}">⏱ ${uhrText(x.ts)}</span>` : '') : `<span class="umsatz">${eur(t.soll)}</span>`} ${x.da && t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
+    return `<button class="chip ${x.id === U.gast ? 'on' : ''} ${zahlKlasse(sch, x.id)}" ${x.da && x.ts ? `data-ts="${x.ts}"` : ''} data-act="gastTop" data-v="${x.id}" data-sch="${sch.id}">🔑 ${esc(schluesselName(x))} ${x.da ? (x.ts ? pie(x.ts) :'') : `<span class="umsatz">${eur(t.soll)}</span>`} ${x.da && t.offen ? `<small>${eur(t.offen)}</small>` : ''}</button>`; };
   // „Gäste“ mit den drei gleich großen Schaltern zu einer Gruppe verbunden (gruppe), jeder in einem eigenen leisen Farbton;
   // mit etwas Abstand folgt der Schichten-Schalter (sch).
   let h = `<span class="gruppe"><span class="gtitel">Gäste</span>
@@ -683,16 +700,26 @@ function gLeiste() {
 // 4-Stunden-Uhr je Gast in der Kopfzeile seiner Karte: läuft von 4:00:00 herunter, danach zählt sie die Überzeit
 // („+0:12:05“, rot) – dann ist die Nachzahlung fällig. Wie markiere() ändert sie nur Text und Klasse, ohne neu zu
 // zeichnen, damit angefangene Eingaben stehen bleiben.
+// Der Kreis füllt sich in 4 Stunden wie ein Zifferblatt im Uhrzeigersinn (von 12 Uhr aus); nach 4 Stunden ist er voll.
+// Farbe = currentColor, damit er auf hellen, grünen und roten Schlüsseln lesbar bleibt.
+function pieD(f) {
+  f = Math.max(0, Math.min(1, f)); if (f <= 0) return '';
+  if (f >= 0.9999) return 'M12 12m-8.4 0a8.4 8.4 0 1 0 16.8 0a8.4 8.4 0 1 0 -16.8 0';
+  const w = 2 * Math.PI * f;
+  return `M12 12L12 3.6A8.4 8.4 0 ${f > 0.5 ? 1 : 0} 1 ${(12 + 8.4 * Math.sin(w)).toFixed(2)} ${(12 - 8.4 * Math.cos(w)).toFixed(2)}Z`;
+}
+const pie = ts => `<svg class="pie" data-ts="${ts}" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Zeit seit Ankunft, voll nach 4 Stunden"><circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/><path class="pf" d="${pieD((Date.now() - ts) / LIMIT_MS)}" fill="currentColor"/></svg>`;
 function uhrText(ts) {
   const rest = LIMIT_MS - (Date.now() - ts), a = Math.abs(rest), z = n => String(n).padStart(2, '0');
   const t = `${Math.floor(a / 3600000)}:${z(Math.floor(a / 60000) % 60)}:${z(Math.floor(a / 1000) % 60)}`;
   return rest > 0 ? t : '+' + t;
 }
 function uhrenAktualisieren() {
-  document.querySelectorAll('.timer[data-ts], .rest[data-ts]').forEach(e => {
-    e.textContent = '⏱ ' + uhrText(+e.dataset.ts);
+  document.querySelectorAll('.timer[data-ts]').forEach(e => {
+    const t = e.querySelector('.tt'); if (t) t.textContent = uhrText(+e.dataset.ts);
     e.classList.toggle('ueber', Date.now() - e.dataset.ts >= LIMIT_MS);
   });
+  document.querySelectorAll('.pie[data-ts]').forEach(e => { const f = (Date.now() - e.dataset.ts) / LIMIT_MS; e.querySelector('.pf').setAttribute('d', pieD(f)); });
 }
 setInterval(uhrenAktualisieren, 1000);
 
@@ -1068,11 +1095,13 @@ function vGast(s, k) {
   U.extraSel = U.extraSel.filter(v => extra.some(e => e[0] === v));   // Angewähltes, das es in dieser Schicht nicht gibt, fällt weg
   // „Gast geht“ (bzw. „Wieder anwesend“) steht oben rechts in der Karte, in einer Zeile mit dem Schlüssel; dazwischen
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
-  return `<div class="card"><div class="k4row"><span class="k4 ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : ''}">🔑 ${esc(kundeText(go))}</span>
-  ${go.da && go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">⏱ ${uhrText(go.ts)}</span>` : ''}
-  ${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
-  ${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" title="Masseur für die nächsten Massagen" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('') || '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
-  ${go.da ? `<button class="k4 go" data-act="geht" data-v="${k}">Gast geht – Schlüssel wird frei</button>` : `<span class="k4 mt go">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</div>
+  return `<div class="card"><div class="kopf">
+    <span class="k4 kopf-key ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : 'Schlüssel'}">${ikone('key', 26)}<b class="knr">${esc((S.kun.find(x => x.id === go.kun) || { nummer: '?' }).nummer)}</b>${go.name ? `<span class="kname">${esc(go.name)}</span>` : ''}</span>
+    ${s.mas.length ? `<span class="mgruppe" title="Masseur für die nächsten Massagen"><span class="mic">${ikone('massage', 24)}</span>${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('')}</span>` : '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
+    ${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
+    <span class="kopf-re">${go.da
+      ? `<button class="k4 exit" data-act="geht" data-v="${k}" title="Gast geht – Schlüssel wird frei" aria-label="Gast geht – Schlüssel wird frei">${ikone('door-exit', 28)}</button>${go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">${ikone('clock', 22)}<span class="tt">${uhrText(go.ts)}</span></span>` : ''}`
+      : `<span class="k4 mt">Gegangen ${go.ab}</span><button class="k4" data-act="zurueck" data-v="${k}">Wieder anwesend</button>`}</span></div>
   ${go.da && go.ts ? `<div class="nachzahlung" data-ts="${go.ts}" data-vl="${vlN}" hidden></div>` : ''}
   <div class="rubriken">
   <div class="rub"><h3>Leistungen</h3><div class="grid kach">${sortiert('lei', l => !l.massage).map(l => kachel(l, 'lei', 'l', kachelStand(buch, zv, l, false))).join('') || '<span class="mut">Keine Dienstleistungen angelegt.</span>'}</div></div>
