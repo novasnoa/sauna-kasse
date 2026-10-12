@@ -1486,6 +1486,9 @@ const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', 
 // ihn eintippen muss (Vorgabe des Betreibers). Er steht damit im Quelltext der Kasse und hält nur Zufallszugriffe vom Schichtplan fern;
 // derselbe Wert liegt dort als Cloudflare-Secret KASSE_SCHLUESSEL. Wechsel: beide Stellen ändern.
 const TERMIN_SCHLUESSEL = 'y81j-UvH1sSce7r3rHgqn7d7_dmJ1FgS', TERMIN_SENT = 'sk-terminsent';
+// Welche Schicht ein Termin ist, entscheidet allein die Uhrzeit des Beginns: 12:00 bis 18:30 Tagesschicht, sonst Abendschicht
+// (so zählt auch der Schichtplan). Deshalb gibt es bei der Reservierung keine Schichtwahl.
+const terminNr = zeit => { const [h, m] = String(zeit).split(':').map(Number), min = h * 60 + m; return min >= 720 && min <= 1110 ? 1 : 2; };
 const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
 const terminAnzeige = () => (S.ter || []).filter(x => x.datum >= heute()).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit));
 let terminLauf = false, terminFehler = '', terminOk = '';
@@ -1519,8 +1522,8 @@ function vTermine() {
   const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Wird an den Schichtplan gesendet.</span>';
   return `<div class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(640px,100%)">
     <div class="row"><b>Massagetermine reservieren</b></div>
-    <div class="mut">Gilt für Tag und Schicht – wer massiert, legt der Schichtplan fest.</div>
-    <div class="row"><input id="t-datum" type="date" value="${heute()}"><select id="t-nr"><option value="1">Tagesschicht</option><option value="2" selected>Abendschicht</option></select><input id="t-zeit" type="time"></div>
+    <div class="mut">Beginn 12:00–18:30 zählt zur Tagesschicht, sonst zur Abendschicht. Wer massiert, legt der Schichtplan fest.</div>
+    <div class="row"><input id="t-datum" type="date" value="${heute()}"><input id="t-zeit" type="time"></div>
     <div class="row"><input id="t-was" list="t-massagen" placeholder="Massage" style="flex:1;min-width:180px"><datalist id="t-massagen">${massagen.map(m => `<option value="${esc(m)}">`).join('')}</datalist><input id="t-gast" placeholder="Name / Hinweis (optional)" style="flex:1;min-width:160px"></div>
     <div class="row"><button class="p" data-act="terminNeu">Reservieren</button></div>
     <h3>Kommende Termine (${liste.length})</h3>
@@ -1838,9 +1841,9 @@ const A = {
   termine: () => { U.termine = true; terminOk = ''; },
   terminZu: () => { U.termine = false; },
   terminNeu: () => {
-    const datum = $v('t-datum'), nr = +$v('t-nr'), zeit = $v('t-zeit'), was = $v('t-was').trim(), gast = $v('t-gast').trim();
+    const datum = $v('t-datum'), zeit = $v('t-zeit'), was = $v('t-was').trim(), gast = $v('t-gast').trim();
     if (!datum || !zeit || !was) { alert('Bitte Tag, Uhrzeit und Massage angeben.'); return false; }
-    S.ter.push({ id: id(), datum, nr, zeit, was, gast });
+    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, was, gast });
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   terminJetzt: () => { terminPush(true); },
