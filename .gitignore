@@ -4,3 +4,6 @@
 # Dienstkonto-Schlüssel gehören nur ins GitHub-Geheimnis, nie ins Repo
 sauna-kassensystem-*.json
 *-firebase-adminsdk-*.json
+
+# entsteht bei der Veröffentlichung aus dem Schichtplan (tools/plan-holen.mjs), gehört nicht ins Repo
+plan.json

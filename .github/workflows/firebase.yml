@@ -10,9 +10,13 @@
 # Voraussetzung: im Repo unter Settings → Secrets and variables → Actions das Geheimnis
 # FIREBASE_SERVICE_ACCOUNT (der JSON-Schlüssel des Dienstkontos, siehe ÜBERGABE.md).
 name: Firebase
+# Zusätzlich alle 30 Minuten: holt den Massageplan neu und veröffentlicht nur, wenn er sich geändert hat.
+# Voraussetzung dafür: Geheimnis SCHICHTPLAN_PASSWORT (Teampasswort des Schichtplans).
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,7 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Massageplan holen
+        id: plan
+        env:
+          SCHICHTPLAN_PASSWORT: ${{ secrets.SCHICHTPLAN_PASSWORT }}
+        run: node tools/plan-holen.mjs
       - name: Schlüssel bereitstellen
+        if: github.event_name != 'schedule' || steps.plan.outputs.geaendert == 'ja'
         env:
           SCHLUESSEL: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -34,6 +44,7 @@ jobs:
           fi
           printf '%s' "$SCHLUESSEL" > "$RUNNER_TEMP/firebase-schluessel.json"
       - name: Veröffentlichen
+        if: github.event_name != 'schedule' || steps.plan.outputs.geaendert == 'ja'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-schluessel.json
         run: npx --yes firebase-tools@15.33.0 deploy --only hosting --project sauna-kassensystem --non-interactive

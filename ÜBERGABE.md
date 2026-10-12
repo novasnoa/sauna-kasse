@@ -36,3 +36,17 @@ Vorher auf jedem Gerät die Sicherung herunterladen.
 
 ## Danach
 GitHub Pages (`novasnoa.github.io/sauna-kasse`) kann abgeschaltet werden, sobald alle Geräte auf der neuen Adresse laufen.
+
+## Massageplan (Schichtplan lesen)
+
+Der Schichtplan (Cloudflare) lässt Abfragen aus fremden Seiten nicht zu und wird nicht verändert. Statt dessen holt
+`tools/plan-holen.mjs` den Plan in der Veröffentlichung (GitHub Actions, alle 30 Minuten und bei jedem Push), meldet sich mit
+dem Teampasswort an und legt nur Anzeigedaten als `plan.json` neben die Kasse (nicht im Repo, `.gitignore`). Die Kasse liest
+`./plan.json` (Knopf „Massageplan“ oben), merkt sich den letzten guten Stand im Gerät und zeigt „Stand …“.
+Veröffentlicht wird bei Zeitplan-Läufen nur, wenn sich der Plan geändert hat.
+
+**Einmalig einzurichten:** GitHub → Repo → Settings → Secrets and variables → Actions → New repository secret,
+Name `SCHICHTPLAN_PASSWORT`, Wert = Teampasswort des Schichtplans. Ohne das Geheimnis bleibt der Plan leer
+(„nicht verfügbar“); die Kasse läuft normal weiter.
+Sofort aktualisieren: Actions → Firebase → Run workflow.
+Die Daten gelten als praktisch öffentlich (Vorgabe des Betreibers); das Passwort steht nie im Quelltext.

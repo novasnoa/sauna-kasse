@@ -204,6 +204,15 @@ header button.menubtn{width:52px;height:52px;padding:0;display:inline-flex;align
 /* Offenes Fenster: die Seite dahinter bleibt stehen (sonst wandert beim Wischen am Rand oder bei kurzem Inhalt die Seite mit). */
 body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
+.pw{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#0F6E56;border-top:5px solid #0F6E56;background:#edf7f3;border-radius:var(--rk);padding:6px 10px;margin:8px 0 6px}
+.pg{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.pt{background:#faf6f1;border:1px solid var(--line);border-radius:var(--rk);padding:6px;min-width:0}
+.pt.leer{background:#f3f1ee}.pt.heute{outline:2px solid var(--acc)}
+.pd{font-size:13px;color:var(--mut);margin-bottom:3px}.pd b{color:#222}
+.ps small{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-top:4px}
+.pn{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px;background:#fff;border:1px solid var(--line);border-left:5px solid var(--c);border-radius:6px;padding:3px 6px;margin:2px 3px 0 0}
+.pn.frei{--c:#b3361f;background:#fde8e4;color:#b3361f;border-color:#b3361f}
+@media(max-width:700px){.pg{grid-template-columns:repeat(2,1fr)}}
 .noprint{}
 .printonly{display:none}
 @media print{
@@ -238,7 +247,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -678,7 +687,7 @@ function render() {
   if (verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   // Abrechnung und Stammdaten stehen hinter einem gemeinsamen Menüsymbol; im Menü sind sie wieder getrennte Einträge.
-  $('nav').innerHTML = `<button class="planbtn" data-act="plan" title="Massageplan öffnen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
+  $('nav').innerHTML = `<button class="planbtn" data-act="plan" title="Massageplan anzeigen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
     <button class="menubtn ${U.pop === 'menu' || U.tab === 'abr' || U.tab === 'stamm' ? 'on' : ''}" data-act="pop" data-v="menu" title="Menü: Abrechnung, Stammdaten" aria-label="Menü">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>` +
     (U.pop === 'menu' ? `<div id="pop" class="menu">
@@ -691,6 +700,7 @@ function render() {
   if (geschuetzt() && pinGesetzt() && !gesperrt) U.frei = Date.now() + PIN_MIN;   // jede Bedienung verlängert
   const sperrKnopf = geschuetzt() && pinGesetzt() && !gesperrt ? '<div class="row noprint"><button data-act="sperren">🔒 Jetzt sperren</button></div>' : '';
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
+  if (U.plan) $('app').insertAdjacentHTML('beforeend', vPlan());
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
@@ -904,8 +914,9 @@ function gLade() {
 // „mail“: zusätzlich das Recht, in Ihrem Namen Mails zu senden (nur Senden, kein Lesen). Es wird nur verlangt, wenn der
 // automatische Mailversand eingeschaltet ist – sonst sieht die Google-Anmeldung davon nichts.
 // Der Schichtplan der Masseure ist eine eigene Seite (Cloudflare). Sein Zugang hängt an einem Cookie mit SameSite=Lax und er erlaubt keine
-// Abfragen von fremden Adressen – deshalb lässt er sich weder einbetten noch aus der Kasse auslesen. Der Knopf öffnet ihn darum als
-// eigenes Fenster; dort bleibt man angemeldet wie sonst auch.
+// Abfragen von fremden Adressen – die Kasse kann ihn deshalb nicht selbst auslesen. Statt dessen holt ihn die Veröffentlichung
+// (tools/plan-holen.mjs, alle 30 Min.) und legt ihn als plan.json neben die Kasse; hier wird nur diese Datei gelesen.
+// Der echte Plan lässt sich weiter als eigenes Fenster öffnen (dort bleibt man angemeldet wie sonst auch).
 const SCHICHTPLAN_URL = 'https://sauna-schichtplan.sauna-schichtplan.workers.dev/';
 const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
 function gToken(interaktiv, mail) {
@@ -1464,6 +1475,54 @@ const STAMM = [
   { id: 'kun', k: 'kun', t: 'Kunden', f: [['nummer', 'Schlüsselnr.'], ['name', 'Bezeichnung (optional)']] }
 ];
 const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
+// Massageplan: plan.json von der eigenen Adresse. Der letzte gute Stand liegt zusätzlich im Gerät, damit der Plan auch ohne Netz
+// erscheint (dann mit dem Stand, den er hat). Bewusst nicht in S: der Plan gehört nicht zur Kasse und wird nicht zwischen Geräten gesichert.
+const PLAN_KEY = 'saunakasse-plan';
+let PLAN = null, PLAN_FEHLER = false;
+try { PLAN = JSON.parse(localStorage.getItem(PLAN_KEY) || 'null'); } catch (e) {}
+async function planLaden() {
+  try {
+    const r = await fetch('./plan.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const p = await r.json();
+    if (!p || !Array.isArray(p.shifts)) throw new Error('Format');
+    PLAN = p; PLAN_FEHLER = false;
+    try { localStorage.setItem(PLAN_KEY, JSON.stringify(p)); } catch (e) {}
+  } catch (e) { PLAN_FEHLER = true; }
+  if (U.plan) render();
+}
+const WT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+function vPlan() {
+  const kopf = `<div class="row"><b>Massageplan</b><span class="mut">nur lesen</span></div>`;
+  if (!PLAN) return `<div class="modal" role="dialog" aria-label="Massageplan"><div class="card" style="width:min(520px,100%)">${kopf}
+    <div class="mut">${PLAN_FEHLER ? 'Der Plan ist gerade nicht verfügbar (kein Netz oder noch nicht eingerichtet).' : 'Plan wird geladen …'}</div>
+    <div class="row" style="margin-top:12px"><button class="p" data-act="planZu">Schließen</button><button data-act="planAuf">Schichtplan öffnen</button></div></div></div>`;
+  const tage = {}; PLAN.shifts.forEach(x => { (tage[x.date] = tage[x.date] || {})[x.shiftType] = (tage[x.date][x.shiftType] || []).concat([x]); });
+  const heute = new Date(); heute.setHours(12, 0, 0, 0);
+  const mo = new Date(heute); mo.setDate(mo.getDate() - ((mo.getDay() + 6) % 7));
+  const lokal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const kurz = d => `${d.getDate()}.${d.getMonth() + 1}.`;
+  const zeile = (liste, tit) => {
+    if (!liste) return '';
+    const chips = liste.flatMap(x => { const c = x.claims.map(k => `<span class="pn" style="--c:${/^#[0-9a-f]{3,8}$/i.test(k.color) ? k.color : '#999'}">${esc(String(k.name).replace(/\s+massage$/i, ''))}</span>`); for (let i = x.claims.length; i < (x.slots || 1); i++) c.push('<span class="pn frei">frei</span>'); return c; });
+    return `<div class="ps"><small>${tit}</small>${chips.join('')}</div>`;
+  };
+  let wochen = '';
+  for (let w = 0; w < 4; w++) {
+    const a = new Date(mo); a.setDate(a.getDate() + w * 7); const e = new Date(a); e.setDate(e.getDate() + 6);
+    let zellen = '';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(a); d.setDate(d.getDate() + i); const t = tage[lokal(d)];
+      zellen += `<div class="pt ${t ? '' : 'leer'} ${lokal(d) === lokal(heute) ? 'heute' : ''}"><div class="pd"><span>${WT[d.getDay()]}</span> <b>${kurz(d)}</b></div>${t ? zeile(t.frueh, 'Tag') + zeile(t.spaet, 'Abend') : '<div class="mut">kein Plan</div>'}</div>`;
+    }
+    wochen += `<div class="pw">Woche vom ${kurz(a)} – ${kurz(e)}</div><div class="pg">${zellen}</div>`;
+  }
+  const st = PLAN.stand ? new Date(PLAN.stand).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div class="modal" role="dialog" aria-label="Massageplan"><div class="card" style="width:min(1100px,100%)">${kopf}
+    <div class="mut" style="margin:2px 0 8px">Tag = Tagesschicht, Abend = Abendschicht · rot = noch nicht besetzt${st ? ' · Stand ' + st + ' Uhr' : ''}${PLAN_FEHLER ? ' · <span class="warn">Aktualisierung fehlgeschlagen, älterer Stand</span>' : ''}</div>
+    ${wochen}
+    <div class="row" style="margin-top:12px"><button class="p" data-act="planZu">Schließen</button><button data-act="planAuf">Schichtplan öffnen</button></div></div></div>`;
+}
 // Masseure aus dem Schichtplan übernehmen: Die Namen werden aus dem Plan hier eingefügt (eine Zeile je Person, auch die ganze Liste
 // „EM Eva Massage …“ geht). Die Kasse kann den Plan nicht selbst abfragen (siehe SCHICHTPLAN_URL). Es werden nur neue Namen angelegt,
 // vorhandene bleiben mit ihrer Mailadresse unberührt; Rollen wie „Owner“ und der Eintrag „Geschlossen“ werden übersprungen.
@@ -1482,7 +1541,7 @@ function vMasImport() {
   return `<div class="card"><h2>Aus dem Schichtplan übernehmen</h2>
     <div class="mut">Namen aus dem Schichtplan hier einfügen (eine Zeile je Person). „Massage“ hinter dem Namen und Kürzel davor werden entfernt, Owner und „Geschlossen“ übersprungen. Wer schon da ist, bleibt unverändert.</div>
     <div class="row"><textarea id="mas-imp" rows="6" style="flex:1;min-width:260px;font:inherit;padding:10px;border:1px solid var(--line);border-radius:var(--rk)" placeholder="Eva&#10;Gaby&#10;Hanna-Luise …"></textarea></div>
-    <div class="row"><button class="p" data-act="masImport">Masseur*innen übernehmen</button><button data-act="plan">Schichtplan öffnen</button></div></div>`;
+    <div class="row"><button class="p" data-act="masImport">Masseur*innen übernehmen</button>${PLAN && PLAN.personen ? '<button data-act="masPlan">Alle aus dem Plan übernehmen</button>' : ''}<button data-act="planAuf">Schichtplan öffnen</button></div></div>`;
 }
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
@@ -1721,7 +1780,10 @@ const A = {
     if (!confirm(`${neu.length} neue Masseur*innen anlegen?\n\n${neu.join(', ')}${namen.length > neu.length ? `\n\n(${namen.length - neu.length} schon vorhanden, bleiben unverändert)` : ''}\n\nE-Mail und Telefon tragen Sie danach ein.`)) return false;
     neu.forEach(n => S.mas.push({ id: id(), name: n }));
   },
-  plan: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
+  plan: () => { U.plan = true; planLaden(); },
+  planZu: () => { U.plan = false; },
+  planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
+  masPlan: () => { $('mas-imp').value = (PLAN.personen || []).join('\n'); A.masImport(); },
   masUeZu: () => { U.masUe = null; },
   artWahl: v => { U.art = v; behalte(); },
   extraSchalter: () => { U.extra = !U.extra; U.extraSel = []; },
@@ -1928,6 +1990,7 @@ document.addEventListener('change', e => {
   } else if (el.tagName === 'SELECT' && el.dataset.act) { A[el.dataset.act](); render(); }
 });
 render();
+planLaden();
 suWiederaufnahme(); if (U.suPay || U.suEntsperren) render();
 </script>
 </body>
