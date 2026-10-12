@@ -83,6 +83,7 @@ button.k4.mt{cursor:pointer;font-weight:600}
 .mgruppe .mic{display:inline-flex;padding:0 4px 0 12px;color:#0F6E56}
 .mgruppe .k4{height:46px;min-height:46px;border:none;background:transparent;font-size:17px}
 .mgruppe .k4.mt.on{background:var(--acc);color:#fff}
+.mgruppe .mn{margin-left:8px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#0F6E56;color:#fff;font-size:13px;font-weight:700;line-height:22px;text-align:center}
 .kopf-re{margin-left:auto;display:flex;align-items:center;gap:10px}
 .k4.exit{width:60px;padding:0;justify-content:center;color:var(--warn);border:2px solid var(--warn);background:#fff}
 .k4.timer{gap:8px;padding:0 20px 0 14px;min-width:150px;justify-content:center}
@@ -218,7 +219,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -1176,7 +1177,7 @@ function vGast(s, k) {
   // die Masseure der Schicht, damit man beim Buchen sieht, wer heute da ist.
   return `<div class="card"><div class="kopf">
     <span class="k4 kopf-key ${zahlKlasse(s, k)}" title="${t.offen > 0 ? 'Noch offen' : t.soll > 0 ? 'Bezahlt' : 'Schlüssel'}">${ikone('key', 26)}<b class="knr">${esc((S.kun.find(x => x.id === go.kun) || { nummer: '?' }).nummer)}</b>${go.name ? `<span class="kname">${esc(go.name)}</span>` : ''}</span>
-    ${s.mas.length ? `<span class="mgruppe" title="Masseur für die nächsten Massagen"><span class="mic">${ikone('massage', 24)}</span>${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" data-act="masWahl" data-v="${m}">${esc(name('mas', m))}</button>`).join('')}</span>` : '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
+    ${s.mas.length ? `<span class="mgruppe" title="Masseur antippen: seine Massagen in dieser Schicht"><span class="mic">${ikone('massage', 24)}</span>${s.mas.map(m => `<button class="k4 mt ${m === U.mas ? 'on' : ''}" data-act="masUe" data-v="${m}">${esc(name('mas', m))}${(() => { const n = masseurDaten([s], m).bu.reduce((a, b) => a + b.menge, 0); return n ? `<span class="mn">${n}</span>` : ''; })()}</button>`).join('')}</span>` : '<span class="k4 mt">Keine Masseure in der Schicht</span>'}
     ${go.da && go.ts && vlStunden(go) > 0 && !vlItem() ? '<span class="k4 vl" title="In den Stammdaten unter Services anlegen, dann bucht die Kasse sie selbst">⚠ Leistung „Verlängerung“ fehlt</span>' : ''}
     <span class="kopf-re">${go.da
       ? `<button class="k4 exit" data-act="geht" data-v="${k}" title="Gast geht – Schlüssel wird frei" aria-label="Gast geht – Schlüssel wird frei">${ikone('door-exit', 28)}</button>${go.ts ? `<span class="k4 timer" data-ts="${go.ts}" title="Eintritt gilt 4 Stunden">${ikone('clock', 22)}<span class="tt">${uhrText(go.ts)}</span></span>` : ''}`
@@ -1192,6 +1193,7 @@ function vGast(s, k) {
   </div>
   <div class="row" style="margin-top:12px"><button data-act="extraSchalter">Sonstiges Trinkgeld</button></div>
   ${U.masFrage ? vMasFrage(s) : ''}
+  ${U.masUe ? vMasUe(s) : ''}
   ${U.extra ? `<div class="modal" role="dialog" aria-label="Sonstiges Trinkgeld"><div class="card">
     <h2>Sonstiges Trinkgeld</h2>
     <div class="row"><input id="x-betrag" size="9" inputmode="decimal" placeholder="Betrag €">
@@ -1419,6 +1421,25 @@ function bucheZeile(s, l, masseur) {
   if (da) da.menge += 1;
   else s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
 }
+// Massageübersicht eines Masseurs: seine Massagen in der aktuellen Schicht. In der Abendschicht kommen die Massagen dazu, die
+// am selben Tag in der Tagesschicht entgegengenommen wurden – getrennt aufgeführt, denn abgerechnet sind sie dort.
+function vMasUe(s) {
+  const mid = U.masUe, nm = name('mas', mid);
+  const gt = (sch, gid) => { const g = sch.gaeste.find(x => x.id === gid); return g ? schluesselName(g) : '?'; };
+  const teil = (sch, titel, hinweis) => {
+    const d = masseurDaten([sch], mid), n = d.bu.reduce((a, b) => a + b.menge, 0);
+    return { d, n, html: `<h3>${titel}${hinweis ? ` <span class="mut" style="font-weight:400">${hinweis}</span>` : ''}</h3>` + (d.bu.length
+      ? `<table>${d.bu.map(b => `<tr><td>${b.zeit}</td><td>🔑 ${esc(gt(sch, b.gast))}</td><td>${b.menge > 1 ? b.menge + '× ' : ''}${esc(b.name)}</td><td class="r">${eur(b.menge * b.preis)}</td></tr>`).join('')}
+        <tr><th colspan="3">${n} Massage${n === 1 ? '' : 'n'} · Rechnung ${MASSEUR_PROZENT} %: ${eur(d.re)}${d.ti ? ' · Trinkgeld ' + eur(d.ti) : ''}</th><th class="r">${eur(d.um)}</th></tr></table>`
+      : '<div class="mut">Keine Massagen.</div>') };
+  };
+  const vor = s.nr === 2 ? S.sch.find(x => x.datum === s.datum && x.nr === 1 && x.id !== s.id) : null;
+  const jetzt = teil(s, schName(s.nr), 'diese Schicht'), frueh = vor ? teil(vor, schName(vor.nr), 'früher am Tag, dort abgerechnet') : null;
+  const gesamt = frueh && (jetzt.n + frueh.n) ? `<div class="vermerk"><b>Heute gesamt:</b> ${jetzt.n + frueh.n} Massagen · Umsatz ${eur(jetzt.d.um + frueh.d.um)} · Rechnung ${MASSEUR_PROZENT} %: ${eur(jetzt.d.re + frueh.d.re)}</div>` : '';
+  return `<div class="modal" role="dialog" aria-label="Massagen von ${esc(nm)}"><div class="card" style="width:min(620px,100%)">
+    <h2>${ikone('massage', 26)} ${esc(nm)} – Massagen</h2>${jetzt.html}${frueh ? frueh.html : ''}${gesamt}
+    <div class="row" style="margin-top:12px"><button class="p" data-act="masUeZu">Schließen</button></div></div></div>`;
+}
 function vMasFrage(s) {
   const l = S.lei.find(x => x.id === U.masFrage); if (!l) return '';
   return `<div class="modal" role="dialog" aria-label="Masseur bestätigen"><div class="card" style="width:min(520px,100%)">
@@ -1585,6 +1606,8 @@ const A = {
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
+  masUe: v => { U.masUe = v; },
+  masUeZu: () => { U.masUe = null; },
   artWahl: v => { U.art = v; behalte(); },
   extraSchalter: () => { U.extra = !U.extra; U.extraSel = []; },
   extraWahl: v => { U.extraSel = U.extraSel.includes(v) ? U.extraSel.filter(x => x !== v) : [...U.extraSel, v]; behalte(); },
