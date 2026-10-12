@@ -708,7 +708,7 @@ function gLeiste() {
   if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schicht wählen:</div>
     <div class="row">${off.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schTop" data-v="${x.id}">${datumDe(x.datum)} · ${schName(x.nr)}</button>`).join('')}</div>
     <div class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</div>
-    <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button><button data-act="oeffnenForm">＋ Neue Schicht</button></div>
+    <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button></div>
     <div class="gegangen"><div class="mut">Gegangene Gäste (${weg}):</div>${zeilen(false, 'Noch niemand gegangen.')}</div></div>`;
   if (U.pop === 'gast') h += `<div id="pop"><div class="mut">Anwesend (${aktiv}) – Gast wählen:</div>${zeilen(true, 'Niemand.')}</div>`;
   return h;
@@ -1072,20 +1072,27 @@ function vKasse() {
 
 // Die Karte „Neue Schicht öffnen“ unter der Kasse ist entfallen. Das Formular kommt als Popup, geöffnet über den
 // Schichten-Schalter („＋ Neue Schicht“) oder – solange keine Schicht offen ist – über „Schicht öffnen“ im Kopf.
+// Eine Schicht wird nur ohne offene Schicht eröffnet (sonst: Wechsel von Tag auf Abend oder Schließen). Weil es im Sommer oft nur
+// Abendschichten gibt, wird nicht vorgegeben, sondern gefragt: Tagesschicht oder Abendschicht?
 function vOeffnen() {
   const ab = '<button data-act="oeffnenAb">Abbrechen</button>';
   if (!aktive('ma').length) return `<div class="modal" role="dialog"><div class="card"><div class="warn">Bitte zuerst unter „Stammdaten“ mindestens einen Mitarbeiter anlegen.</div><div class="row">${ab}</div></div></div>`;
-  const d = heute();
-  return `<div class="modal" role="dialog" aria-label="Neue Schicht öffnen"><div class="card"><h2>Neue Schicht öffnen</h2>
+  const d = heute(), nr = U.oeffnenNr;
+  if (!nr) {
+    const da = n => S.sch.some(x => x.datum === d && x.nr === n);
+    const knopf = n => `<button class="${da(n) ? '' : 'p'}" style="min-height:84px;flex:1;min-width:180px;font-size:22px" data-act="oeffnenArt" data-v="${n}" ${da(n) ? 'disabled' : ''}>${schName(n)}${da(n) ? '<br><small style="font-weight:400">heute schon gewesen</small>' : ''}</button>`;
+    return `<div class="modal" role="dialog" aria-label="Schicht öffnen"><div class="card"><h2>Welche Schicht öffnen?</h2>
+      <div class="row">${knopf(1)}${knopf(2)}</div><div class="row">${ab}</div></div></div>`;
+  }
+  return `<div class="modal" role="dialog" aria-label="${schName(nr)} öffnen"><div class="card"><h2>${schName(nr)} öffnen</h2>
   <div class="row">
     <input type="date" id="o-datum" value="${d}">
-    <select id="o-nr"><option value="1">Tagesschicht</option><option value="2">Abendschicht</option></select>
     <select id="o-ma">${aktive('ma').map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
   </div>
   <div class="row"><span class="mut">Masseure in dieser Schicht:</span>
     ${aktive('mas').map(m => `<label><input type="checkbox" name="o-mas" value="${m.id}"> ${esc(m.name)}</label>`).join('') || '<span class="mut">(keine angelegt)</span>'}
   </div>
-  <div class="row"><button class="p" data-act="oeffnen">Schicht öffnen</button>${ab}</div></div></div>`;
+  <div class="row"><button class="p" data-act="oeffnen">${schName(nr)} öffnen</button><button data-act="oeffnenZurueck">Andere Schicht</button>${ab}</div></div></div>`;
 }
 
 // Schicht bearbeiten (Kasse/Masseure ändern) und Wechsel Tag → Abend teilen sich dieses Formular.
@@ -1652,15 +1659,18 @@ const A = {
   abrWahl: () => { U.abr = $v('abr-sel'); },
   abrFuer: () => { U.fuer = $v('abr-fuer'); },
   oeffnen: () => {
-    const datum = $v('o-datum'), nr = +$v('o-nr');
+    const datum = $v('o-datum'), nr = U.oeffnenNr;
+    if (!nr) return false;
     if (!datum) { alert('Bitte ein Datum wählen.'); return false; }
     if (S.sch.some(s => s.datum === datum && s.nr === nr)) { alert(`Die ${schName(nr)} wurde am ${datumDe(datum)} schon geöffnet.`); return false; }
     const mas = [...document.querySelectorAll('input[name=o-mas]:checked')].map(c => c.value);
     const s = { id: id(), datum, nr, ma: $v('o-ma'), mas, gaeste: [], buch: [], zahl: [], zu: false };
-    S.sch.push(s); U.sch = s.id; U.gast = null; U.gastZu = false; U.oeffnen = false;
+    S.sch.push(s); U.sch = s.id; U.gast = null; U.gastZu = false; U.oeffnen = false; U.oeffnenNr = null;
   },
-  oeffnenForm: () => { U.oeffnen = true; U.tab = 'kasse'; U.form = null; },
-  oeffnenAb: () => { U.oeffnen = false; },
+  oeffnenArt: v => { U.oeffnenNr = +v; },
+  oeffnenZurueck: () => { U.oeffnenNr = null; },
+  oeffnenForm: () => { U.oeffnen = true; U.oeffnenNr = null; U.tab = 'kasse'; U.form = null; },
+  oeffnenAb: () => { U.oeffnen = false; U.oeffnenNr = null; },
   wechselForm: () => { U.form = 'wechsel'; U.tab = 'kasse'; },
   bearbForm: () => { U.form = 'bearb'; U.tab = 'kasse'; },
   formAb: () => { U.form = null; },
