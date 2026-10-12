@@ -182,6 +182,9 @@ header button.menubtn{width:52px;height:52px;padding:0;display:inline-flex;align
 .k4.bezahlt,.chip.bezahlt,#pop button.chip.bezahlt{background:var(--ok);color:#fff;border-color:var(--ok)}
 .chip.on.offen,.chip.on.bezahlt,#pop button.chip.on.offen,#pop button.chip.on.bezahlt{box-shadow:0 0 0 2px #fff,0 0 0 5px var(--acc)}
 .chip.rot.bezahlt,#pop button.chip.rot.bezahlt{background:var(--warn);border-color:var(--warn)}   /* über vier Stunden im Haus bleibt rot, auch wenn bezahlt */
+/* Der gewählte Gast in der Liste ist nur umrandet, nicht braun ausgefüllt; rot/grün/rot-nach-4-Stunden bleibt als Füllung erhalten. */
+#pop button.chip.on[data-act="gastTop"]{border:3px solid var(--acc)}
+#pop button.chip.on[data-act="gastTop"]:not(.offen):not(.bezahlt):not(.rot){background:#fff;color:var(--ink)}
 /* Querformat (Tablet): alles in einer Zeile – etwas engere Knöpfe, damit Olivin, Gästeleiste und Verweise nebeneinander
    passen. Steht bewusst NACH den Grundregeln von #gl, #re und #nav: gleiche Gewichtung, die spätere gewinnt. */
 @media(min-width:980px){
