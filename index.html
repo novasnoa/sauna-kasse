@@ -235,7 +235,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -679,6 +679,7 @@ function render() {
   if (geschuetzt() && pinGesetzt() && !gesperrt) U.frei = Date.now() + PIN_MIN;   // jede Bedienung verlängert
   const sperrKnopf = geschuetzt() && pinGesetzt() && !gesperrt ? '<div class="row noprint"><button data-act="sperren">🔒 Jetzt sperren</button></div>' : '';
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
+  if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
   markiere(); uhrenAktualisieren(); kartenAnzeigen();
@@ -708,8 +709,8 @@ function gLeiste() {
   // Der Schichten-Schalter ist der einzige Weg, die Schicht zu wählen, zu bearbeiten, zu wechseln oder zu schließen.
   // Alle Schichten dieses Tages stehen oben (auch die beendete Tagesschicht nach dem Wechsel); Antippen öffnet ihre Abrechnung.
   const tag = S.sch.filter(x => x.datum === s.datum).sort((a, b) => a.nr - b.nr);
-  if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schichten am ${datumDe(s.datum)} – antippen öffnet die Abrechnung:</div>
-    <div class="row">${tag.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schAbr" data-v="${x.id}">${schName(x.nr)}${x.zu ? ' · beendet' : ' · läuft'}</button>`).join('')}</div>
+  if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schichten am ${datumDe(s.datum)} – antippen öffnet die Übersicht:</div>
+    <div class="row">${tag.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schUe" data-v="${x.id}">${schName(x.nr)}${x.zu ? ' · beendet' : ' · läuft'}</button>`).join('')}</div>
     <div class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</div>
     <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button></div>
     <div class="gegangen"><div class="mut">Gegangene Gäste (${weg}):</div>${zeilen(false, 'Noch niemand gegangen.')}</div></div>`;
@@ -1361,6 +1362,41 @@ function masseurAbrechnung(sch, mid) {
   Die Sauna hat alle Einnahmen gesammelt eingenommen; die Rechnung wird zu einem späteren Zeitpunkt gestellt.</div></div>`;
 }
 
+function typenTabelle(d) {
+  const { summe, sbu, mbu, saunaU, massU } = d, alleB = [...sbu, ...mbu];
+  const teil = ([t, titel]) => {
+    const bu = alleB.filter(b => warentyp(b) === t), pos = {};
+    bu.forEach(b => { (pos[b.name] = pos[b.name] || { m: 0, u: 0 }); pos[b.name].m += b.menge; pos[b.name].u += b.menge * b.preis; });
+    return `<tr><th colspan="3" style="background:var(--rg-${t})">${titel}</th></tr>` +
+      (Object.entries(pos).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="3">–</td></tr>') +
+      `<tr><td><b>Summe ${titel}</b></td><td class="r"><b>${summe(bu, b => b.menge)}</b></td><td class="r"><b>${eur(summe(bu, b => b.menge * b.preis))}</b></td></tr>`;
+  };
+  return `<table class="typen"><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>${[['l', 'Leistungen'], ['m', 'Massagen'], ['w', 'Waren']].map(teil).join('')}
+    <tr><th>Gesamt</th><th></th><th class="r">${eur(saunaU + massU)}</th></tr></table>`;
+}
+// Übersicht über die Schichten des Tages für die Mitarbeitenden – bewusst ohne PIN: Umsatz nach Warentyp, Einnahmen, Gäste.
+// Nicht enthalten sind die Rechnungen der Masseure und das Trinkgeld je Person; die stehen nur in der Abrechnung.
+function vSchUe() {
+  const ref = S.sch.find(x => x.id === U.schUe); if (!ref) return '';
+  const tag = S.sch.filter(x => x.datum === ref.datum).sort((a, b) => a.nr - b.nr);
+  const wahl = U.schUeTag ? 'tag' : ref.id;
+  const sch = wahl === 'tag' ? tag : [ref];
+  const d = saunaDaten(sch), summe = d.summe;
+  const von = wahl === 'tag' ? new Set(tag.flatMap(x => x.gaeste.map(g => g.von).filter(Boolean))) : new Set();   // „Tag gesamt“: Gäste, die in die Abendschicht übernommen wurden, zählen nur einmal
+  const gaeste = sch.flatMap(x => x.gaeste.filter(g => !von.has(g.id)).map(g => ({ g, x })));
+  const offen = gaeste.filter(({ g, x }) => gastSumme(x, g.id).offen > 0);
+  const arten = [...new Set(d.zahl.map(z => z.art))];
+  const tab = (id, text) => `<button class="chip ${wahl === id ? 'on' : ''}" data-act="schUeWahl" data-v="${id}">${text}</button>`;
+  return `<div class="modal" role="dialog" aria-label="Schichten am ${datumDe(ref.datum)}"><div class="card" style="width:min(680px,100%)">
+    <h2>Schichten am ${datumDe(ref.datum)}</h2>
+    <div class="row">${tag.map(x => tab(x.id, `${schName(x.nr)} · ${x.zu ? 'beendet' : 'läuft'}`)).join('')}${tag.length > 1 ? tab('tag', 'Tag gesamt') : ''}</div>
+    <div class="mut">${sch.map(x => `${schName(x.nr)}: Kasse ${esc(name('ma', x.ma))}${x.mas.length ? ', Masseure ' + x.mas.map(m => esc(name('mas', m))).join(', ') : ''}`).join(' · ')}</div>
+    <div class="mut" style="margin-top:4px">Gäste: ${gaeste.filter(({ g }) => g.da).length} aktiv · ${gaeste.filter(({ g }) => !g.da).length} gegangen${offen.length ? ` · <span class="warn">${offen.length} mit offenem Betrag (${eur(offen.reduce((a, { g, x }) => a + gastSumme(x, g.id).offen, 0))})</span>` : ''}</div>
+    <h3>Umsatz nach Warentyp</h3>${typenTabelle(d)}
+    <h3>Einnahmen</h3>${arten.length ? `<table>${arten.map(a => { const z = d.zahl.filter(x => x.art === a); return `<tr><td>${esc(a)}</td><td class="r">${eur(summe(z, x => x.betrag + x.tip))}</td></tr>`; }).join('')}
+      <tr><th>Gesamt (mit Trinkgeld)</th><th class="r">${eur(summe(d.zahl, x => x.betrag + x.tip))}</th></tr></table>` : '<div class="mut">Noch keine Zahlungen.</div>'}
+    <div class="row" style="margin-top:12px"><button class="p" data-act="schUeZu">Schließen</button><button data-act="schAbr" data-v="${wahl === 'tag' ? ref.id : wahl}">Zur Abrechnung (PIN)</button></div></div></div>`;
+}
 function abrechnung(sch) {
   // Übernommene Buchungen/Zahlungen sind schon in der Schicht abgerechnet, aus der sie kommen.
   const d = saunaDaten(sch), { summe, sbu, zahl, tv, mids, masseurJe, saunaU, massU, rechnungU, behaltU } = d;
@@ -1375,19 +1411,7 @@ function abrechnung(sch) {
   <div class="mut" style="margin-top:6px">Die Sauna nimmt alle Einnahmen gesammelt ein, auch die für Massagen.</div></div>`;
 
   // Umsatz nach Warentyp: Leistungen, Massagen, Waren – je mit den Positionen und einer Zwischensumme
-  const typen = [['l', 'Leistungen'], ['m', 'Massagen'], ['w', 'Waren']];
-  const alleB = [...sbu, ...d.mbu];
-  const typTeil = ([t, titel]) => {
-    const bu = alleB.filter(b => warentyp(b) === t), pos = {};
-    bu.forEach(b => { (pos[b.name] = pos[b.name] || { m: 0, u: 0 }); pos[b.name].m += b.menge; pos[b.name].u += b.menge * b.preis; });
-    const e = Object.entries(pos);
-    return `<tr><th colspan="3" style="background:var(--rg-${t})">${titel}</th></tr>` +
-      (e.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="3">–</td></tr>') +
-      `<tr><td><b>Summe ${titel}</b></td><td class="r"><b>${summe(bu, b => b.menge)}</b></td><td class="r"><b>${eur(summe(bu, b => b.menge * b.preis))}</b></td></tr>`;
-  };
-  h += `<div class="card"><h3>Umsatz nach Warentyp</h3><table class="typen"><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>
-  ${typen.map(typTeil).join('')}
-  <tr><th>Gesamt</th><th></th><th class="r">${eur(saunaU + massU)}</th></tr></table></div>`;
+  h += `<div class="card"><h3>Umsatz nach Warentyp</h3>${typenTabelle(d)}</div>`;
 
   // Massagen: Umsatz und die Rechnungen der Masseure an die Sauna
   h += `<div class="card"><h3>Massagen – Rechnungen der Masseure (${MASSEUR_PROZENT} % vom Preis, ohne Trinkgeld)</h3>` + (mids.length ? `<table><tr><th>Masseur</th><th>Massage</th><th class="r">Anzahl</th><th class="r">Umsatz</th><th class="r">Rechnung</th></tr>` +
@@ -1645,7 +1669,10 @@ const A = {
   pop: v => { U.pop = U.pop === v ? null : v; },
   gastTop: (v, el) => { U.gast = v; if (el && el.dataset.sch) U.sch = el.dataset.sch; U.gastZu = false; U.extra = false; U.tab = 'kasse'; U.form = null; },
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
-  schAbr: v => { U.abr = v; U.fuer = 'ges'; U.tab = 'abr'; U.gast = null; },
+  schUe: v => { U.schUe = v; U.schUeTag = false; },
+  schUeWahl: v => { if (v === 'tag') U.schUeTag = true; else { U.schUe = v; U.schUeTag = false; } },
+  schUeZu: () => { U.schUe = null; },
+  schAbr: v => { U.schUe = null; U.abr = v; U.fuer = 'ges'; U.tab = 'abr'; U.gast = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   masUe: v => { U.masUe = v; },
