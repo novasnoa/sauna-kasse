@@ -42,6 +42,14 @@ gilt, klärt die Steuerberatung.
 Das ist ein Projekt über Wochen, braucht einen Server (Kosten, Betrieb) und einen Vertrag mit einem TSE-Anbieter – und bleibt nur konform, solange jede Änderung am
 Code die Anforderungen weiter erfüllt.
 
+**C. Offene Ladenkasse (manuell geführt).** Die Pflichten aus § 146a AO und der KassenSichV (TSE, Belegausgabe, Mitteilung, DSFinV-K) gelten für
+*elektronische Aufzeichnungssysteme*. Eine rein manuelle Kassenführung (Zählung der Kasse, täglicher Kassenbericht per Hand) fällt nicht darunter; die **GoBD gelten aber
+auch dort** (Kassenbuch/Kassenbericht ordnungsgemäß, nicht nachträglich änderbar, Kassensturz). Der Haken: Sobald die App die einzelnen Umsätze erfasst und Zahlungen
+buchen lässt, ist sie das elektronische Aufzeichnungssystem – ein Auslagern der „eigentlichen“ Kasse auf Papier bei gleichzeitiger Erfassung in der App ist heikel. Weg C wäre
+nur tragfähig, wenn die App **nicht** mehr kassiert (z. B. nur Schichten, Termine, Masseur*innen-Abrechnung aus Zahlen, die aus der manuellen Kasse stammen). Ob das für
+Dienstleistungen (Sauna-Eintritt) zulässig ist und welche Erleichterungen für Barverkäufe an unbekannte Kunden gelten, muss die Steuerberatung klären (Stand: allgemeine
+Kenntnis, hier nicht gegen die Quellen geprüft).
+
 ## Empfehlung
 
 Zuerst die sechs Fragen oben mit der Steuerberatung klären. Davon hängt ab, ob Weg A genügt oder Weg B nötig ist. Stufe 1 von Weg B (Storno, Sperren,
