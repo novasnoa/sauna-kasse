@@ -50,3 +50,12 @@ Name `SCHICHTPLAN_PASSWORT`, Wert = Teampasswort des Schichtplans. Ohne das Gehe
 („nicht verfügbar“); die Kasse läuft normal weiter.
 Sofort aktualisieren: Actions → Firebase → Run workflow.
 Die Daten gelten als praktisch öffentlich (Vorgabe des Betreibers); das Passwort steht nie im Quelltext.
+
+## Massagetermine → Schichtplan
+
+Knopf „Termine“ oben: reserviert Termine je Tag und Schicht (Tagesschicht/Abendschicht), **ohne Masseur*in** – wer massiert, legt der
+Schichtplan fest; dort sehen die Eingetragenen der Schicht die Termine. Die Termine liegen in `S.ter` und gleichen sich über Google
+zwischen den Geräten ab. Zum Schichtplan geht jeweils die ganze Liste der kommenden Termine (`PUT /api/kasse/termine`, der Plan
+ersetzt seinen Stand); offline wird später nachgeholt. Der Schlüssel (`KASSE_SCHLUESSEL` im Schichtplan) wird einmal je Gerät unter
+„Termine → Schlüssel eintragen“ gesetzt und liegt nur dort (nicht im Google-Konto). Der Plan muss dafür ausgeliefert sein, siehe
+`ANLEITUNG.md` im Schichtplan-Repo.

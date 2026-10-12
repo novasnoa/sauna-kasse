@@ -247,11 +247,11 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
-  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [], tot: {} };
+  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [], ter: [], tot: {} };
 }
 // Warum: früher war ein „Gast“ nur die Kunden-ID. Jetzt ist jeder Aufenthalt ein eigener Satz,
 // damit dieselbe Schlüsselnummer am Abend mehrfach vergeben werden kann, ohne dass sich
@@ -259,6 +259,7 @@ function laden() {
 // bestehende Buchungen und Zahlungen weiter passen.
 function migriere(s) {
   s.sch.forEach(x => { x.gaeste = x.gaeste.map(g => typeof g === 'string' ? { id: g, kun: g, name: '', da: !x.zu, an: '', ab: '' } : g); });
+  s.ter = s.ter || [];   // Massagetermine (Reservierungen), siehe vTermine
   s.tot = s.tot || {};   // Löschvermerke für den Abgleich (Id → Zeitpunkt)
   return s;
 }
@@ -267,6 +268,7 @@ function speichern() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { alert('Speichern im Browser nicht möglich – bitte „Sicherung“ herunterladen!'); }
   if (G.an) gPlan();
+  terminPush();
 }
 const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -687,7 +689,8 @@ function render() {
   if (verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   // Abrechnung und Stammdaten stehen hinter einem gemeinsamen Menüsymbol; im Menü sind sie wieder getrennte Einträge.
-  $('nav').innerHTML = `<button class="planbtn" data-act="plan" title="Massageplan anzeigen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
+  $('nav').innerHTML = `<button class="planbtn" data-act="termine" title="Massagetermine reservieren">${ikone('clock-plus', 24)}<span>Termine</span></button>
+    <button class="planbtn" data-act="plan" title="Massageplan anzeigen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
     <button class="menubtn ${U.pop === 'menu' || U.tab === 'abr' || U.tab === 'stamm' ? 'on' : ''}" data-act="pop" data-v="menu" title="Menü: Abrechnung, Stammdaten" aria-label="Menü">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>` +
     (U.pop === 'menu' ? `<div id="pop" class="menu">
@@ -701,6 +704,7 @@ function render() {
   const sperrKnopf = geschuetzt() && pinGesetzt() && !gesperrt ? '<div class="row noprint"><button data-act="sperren">🔒 Jetzt sperren</button></div>' : '';
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
   if (U.plan) $('app').insertAdjacentHTML('beforeend', vPlan());
+  if (U.termine) $('app').insertAdjacentHTML('beforeend', vTermine());
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
@@ -825,7 +829,7 @@ setInterval(markiere, 30000);
    Zusammengeführt wird je Datensatz (Id): der zuletzt geänderte gewinnt, neue Sätze kommen dazu, Gelöschtes
    steht als Vermerk in S.tot. Die Geräteuhren sollten ungefähr stimmen (automatische Zeit am iPad ist Standard). */
 const GOOGLE_CLIENT_ID = '710064191222-nt56kg78p26guueu0is853evlqg9vl2a.apps.googleusercontent.com';   // Öffentlich, kein Geheimnis; das Client-Secret wird nicht gebraucht.
-const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
+const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch', 'ter'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', tokMail: false, mailBusy: false, mailFehler: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
@@ -1475,6 +1479,51 @@ const STAMM = [
   { id: 'kun', k: 'kun', t: 'Kunden', f: [['nummer', 'Schlüsselnr.'], ['name', 'Bezeichnung (optional)']] }
 ];
 const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
+// Massagetermine: Die Kasse reserviert Termine je Tag und Schicht – bewusst OHNE Masseur*in; wer massiert, steht im Schichtplan.
+// Die Termine liegen in S.ter (und gleichen sich damit über Google zwischen den Geräten ab). Zum Schichtplan geht jeweils die
+// ganze Liste der kommenden Termine; er ersetzt seinen Stand. Warum nicht einzeln melden: ein verlorener Storno-Ruf ließe sonst
+// einen Geistertermin zurück, und ein doppelt gesendeter Stand schadet nicht. Der Schlüssel liegt nur auf diesem Gerät (nicht in S,
+// damit er nicht ins Google-Konto wandert) und wird einmal unter „Termine“ eingetragen.
+const TERMIN_KEY = 'sk-plankey', TERMIN_SENT = 'sk-terminsent';
+const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
+const terminAnzeige = () => (S.ter || []).filter(x => x.datum >= heute()).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit));
+let terminLauf = false, terminFehler = '', terminOk = '';
+async function terminPush(erzwingen) {
+  const key = lsGet(TERMIN_KEY);
+  if (!key || terminLauf || !navigator.onLine) return;
+  const von = heute();
+  const termine = terminAnzeige().map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was, gast: x.gast }));
+  const stand = JSON.stringify({ von, termine });
+  if (!erzwingen && lsGet(TERMIN_SENT) === stand) return;
+  terminLauf = true;
+  try {
+    const r = await fetch(SCHICHTPLAN_URL + 'api/kasse/termine', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Schichtplan': '1', Authorization: 'Bearer ' + key }, body: stand });
+    if (!r.ok) throw new Error(r.status === 401 ? 'Schlüssel wird vom Schichtplan nicht angenommen' : r.status === 503 ? 'Schichtplan ist dafür noch nicht eingerichtet' : 'Schichtplan antwortet mit ' + r.status);
+    lsSet(TERMIN_SENT, stand); terminFehler = ''; terminOk = uhr();
+  } catch (e) { terminFehler = e.message === 'Failed to fetch' ? 'Keine Verbindung zum Schichtplan – wird später erneut versucht' : e.message; }
+  terminLauf = false;
+  if (U.termine) render();
+}
+addEventListener('online', () => terminPush());
+setInterval(() => terminPush(), 5 * 60000);
+function vTermine() {
+  const massagen = sortiert('lei', l => !!l.massage).map(l => l.name);
+  const liste = terminAnzeige(), key = lsGet(TERMIN_KEY);
+  const tage = [...new Set(liste.map(x => x.datum))];
+  const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}</b> ${esc(x.was)}${x.gast ? ' · ' + esc(x.gast) : ''}</span><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></div>`;
+  const wt = d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(d + 'T12:00:00').getDay()];
+  const status = !key ? '<span class="warn">Schlüssel fehlt – die Termine gehen noch nicht an den Schichtplan.</span>' : terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Schlüssel gesetzt.</span>';
+  return `<div class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(640px,100%)">
+    <div class="row"><b>Massagetermine reservieren</b></div>
+    <div class="mut">Gilt für Tag und Schicht – wer massiert, legt der Schichtplan fest.</div>
+    <div class="row"><input id="t-datum" type="date" value="${heute()}"><select id="t-nr"><option value="1">Tagesschicht</option><option value="2" selected>Abendschicht</option></select><input id="t-zeit" type="time"></div>
+    <div class="row"><input id="t-was" list="t-massagen" placeholder="Massage" style="flex:1;min-width:180px"><datalist id="t-massagen">${massagen.map(m => `<option value="${esc(m)}">`).join('')}</datalist><input id="t-gast" placeholder="Name / Hinweis (optional)" style="flex:1;min-width:160px"></div>
+    <div class="row"><button class="p" data-act="terminNeu">Reservieren</button></div>
+    <h3>Kommende Termine (${liste.length})</h3>
+    ${tage.map(d => `<div class="mut" style="margin-top:6px">${wt(d)} ${datumDe(d)}</div>` + [1, 2].map(nr => { const l = liste.filter(x => x.datum === d && x.nr === nr); return l.length ? `<div><small class="mut">${schName(nr)}</small>${l.map(zeile).join('')}</div>` : ''; }).join('')).join('') || '<div class="mut">Noch keine Termine.</div>'}
+    <div class="mut" style="margin-top:10px">${status}</div>
+    <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button><button data-act="terminSchluessel">${key ? 'Schlüssel ändern' : 'Schlüssel eintragen'}</button>${key ? '<button data-act="terminJetzt">Jetzt senden</button>' : ''}</div></div></div>`;
+}
 // Massageplan: plan.json von der eigenen Adresse. Der letzte gute Stand liegt zusätzlich im Gerät, damit der Plan auch ohne Netz
 // erscheint (dann mit dem Stand, den er hat). Bewusst nicht in S: der Plan gehört nicht zur Kasse und wird nicht zwischen Geräten gesichert.
 const PLAN_KEY = 'saunakasse-plan';
@@ -1782,6 +1831,20 @@ const A = {
   },
   plan: () => { U.plan = true; planLaden(); },
   planZu: () => { U.plan = false; },
+  termine: () => { U.termine = true; terminOk = ''; },
+  terminZu: () => { U.termine = false; },
+  terminNeu: () => {
+    const datum = $v('t-datum'), nr = +$v('t-nr'), zeit = $v('t-zeit'), was = $v('t-was').trim(), gast = $v('t-gast').trim();
+    if (!datum || !zeit || !was) { alert('Bitte Tag, Uhrzeit und Massage angeben.'); return false; }
+    S.ter.push({ id: id(), datum, nr, zeit, was, gast });
+  },
+  terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
+  terminSchluessel: () => {
+    const k = prompt('Schlüssel für den Schichtplan (einmalig; liegt nur auf diesem Gerät):', '');
+    if (k === null) return false;
+    lsSet(TERMIN_KEY, k.trim()); lsSet(TERMIN_SENT, ''); terminFehler = ''; terminPush(true);
+  },
+  terminJetzt: () => { terminPush(true); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
   masPlan: () => { $('mas-imp').value = (PLAN.personen || []).join('\n'); A.masImport(); },
   masUeZu: () => { U.masUe = null; },
