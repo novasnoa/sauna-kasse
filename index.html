@@ -1506,9 +1506,9 @@ const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', 
 // ihn eintippen muss (Vorgabe des Betreibers). Er steht damit im Quelltext der Kasse und hält nur Zufallszugriffe vom Schichtplan fern;
 // derselbe Wert liegt dort als Cloudflare-Secret KASSE_SCHLUESSEL. Wechsel: beide Stellen ändern.
 const TERMIN_SCHLUESSEL = 'y81j-UvH1sSce7r3rHgqn7d7_dmJ1FgS', TERMIN_SENT = 'sk-terminsent';
-// Welche Schicht ein Termin ist, entscheidet allein die Uhrzeit des Beginns: 12:00 bis 18:30 Tagesschicht, sonst Abendschicht
+// Welche Schicht ein Termin ist, entscheidet allein die Uhrzeit des Beginns: Beginn 12:00 bis 18:25 Tagesschicht, ab 18:30 Abendschicht
 // (so zählt auch der Schichtplan). Deshalb gibt es bei der Reservierung keine Schichtwahl.
-const terminNr = zeit => { const [h, m] = String(zeit).split(':').map(Number), min = h * 60 + m; return min >= 720 && min <= 1110 ? 1 : 2; };
+const terminNr = zeit => { const [h, m] = String(zeit).split(':').map(Number), min = h * 60 + m; return min >= 720 && min < 1110 ? 1 : 2; };
 const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
 // Kalender der Reservierung: Raster von 5 Minuten, 12:00 bis 24:00; fünf Längen zur Wahl (30, 40, 45, 60, 90). Es gibt nie zwei Massagen zur selben Zeit – unabhängig davon,
 // wer massiert (das legt der Schichtplan fest): ein Termin belegt [Beginn, Beginn + Dauer), direkt aneinander anschließen geht.
@@ -1606,7 +1606,7 @@ function vTermine() {
     <div class="row"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}" style="flex:1"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
     <div class="mut">Länge</div>
     <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
-    <div class="tk-schichten">${[['frueh', 'Tagesschicht 12:00–18:30', ''], ['spaet', 'Abendschicht 18:30–24:00', 'abend']].map(([art, tit, kl]) => `<div class="tk-sch"><span><span class="tk-leg ${kl}"></span> ${tit}</span><span class="tk-wer">${eingeteilt(datum, art)}</span></div>`).join('')}</div>
+    <div class="tk-schichten">${[['frueh', 'Tagesschicht: Beginn 12:00–18:25', ''], ['spaet', 'Abendschicht: Beginn ab 18:30', 'abend']].map(([art, tit, kl]) => `<div class="tk-sch"><span><span class="tk-leg ${kl}"></span> ${tit}</span><span class="tk-wer">${eingeteilt(datum, art)}</span></div>`).join('')}</div>
     <div class="tk-kal">${kal}</div>
     <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><button class="p" data-act="terminNeu" style="margin-left:auto">Reservieren</button></div>
     <h3>Termine am ${wt(datum)} ${datumDe(datum)} (${tagListe.length})</h3>
