@@ -484,6 +484,7 @@ function vPin() {
     <div id="pin-punkte"></div><div class="warn" id="pin-msg" style="min-height:24px"></div>
     <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-act="pinZ" data-v="${n}">${n}</button>`).join('')}
       <button data-act="pinDel" title="Löschen">⌫</button><button data-act="pinZ" data-v="0">0</button><button class="ok" data-act="pinOk">OK</button></div>
+    <div class="row" style="justify-content:center"><button data-act="pinAb" style="min-width:160px">Abbrechen</button></div>
     <button style="color:var(--mut);background:none;border:none;text-decoration:underline" data-act="pinVergessen">PIN vergessen?</button></div>`;
 }
 function vPinVerwaltung() {
@@ -1543,6 +1544,7 @@ const A = {
     return false;
   },
   pinVergessen: () => { U.pinReset = true; },
+  pinAb: () => { U.pinEin = ''; U.pinReset = false; U.tab = 'kasse'; },   // zurück zur Kasse, ohne zu entsperren
   pinRecAb: () => { U.pinReset = false; },
   pinRecOk: () => {
     const c = ($v('pin-rec') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1876,7 +1878,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (!$('pin-punkte') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
-  if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk();
+  if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk(); else if (e.key === 'Escape') { A.pinAb(); render(); }
 });
 // Ist die Sperre inzwischen abgelaufen, zeigt eine offen gelassene Abrechnung wieder die PIN-Abfrage.
 setInterval(() => { if (geschuetzt() && pinGesetzt() && !entsperrt() && !$('pin-punkte') && !$('pin-rec')) render(); }, 15000);
