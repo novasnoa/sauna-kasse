@@ -56,6 +56,7 @@ button.x{color:var(--warn);min-width:48px;font-size:20px;padding:4px 8px}
 .grid small{display:block;color:var(--mut)}
 .grid button.mass{border-left:4px solid var(--acc)}
 table{width:100%;border-collapse:collapse;font-size:15px}
+:root{--rg-l:#fbf5ee;--rg-m:#edf7f3;--rg-w:#f0f0ee}   /* Farben der drei Warentypen wie auf der Kasse */
 td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
 td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 .mut{color:var(--mut)}.warn{color:var(--warn);font-weight:600}.good{color:var(--ok);font-weight:600}
@@ -705,8 +706,10 @@ function gLeiste() {
     return (off.length > 1 ? `<div class="mut">${schName(x.nr)} ${datumDe(x.datum)}</div>` : '') + `<div class="row">${gs.map(g => chip(g, x)).join('') || `<span class="mut">${leer}</span>`}</div>`;
   }).join('');
   // Der Schichten-Schalter ist der einzige Weg, die Schicht zu wählen, zu bearbeiten, zu wechseln oder zu schließen.
-  if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schicht wählen:</div>
-    <div class="row">${off.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schTop" data-v="${x.id}">${datumDe(x.datum)} · ${schName(x.nr)}</button>`).join('')}</div>
+  // Alle Schichten dieses Tages stehen oben (auch die beendete Tagesschicht nach dem Wechsel); Antippen öffnet ihre Abrechnung.
+  const tag = S.sch.filter(x => x.datum === s.datum).sort((a, b) => a.nr - b.nr);
+  if (U.pop === 'sch') h += `<div id="pop"><div class="mut">Schichten am ${datumDe(s.datum)} – antippen öffnet die Abrechnung:</div>
+    <div class="row">${tag.map(x => `<button class="chip ${x.id === s.id ? 'on' : ''}" data-act="schAbr" data-v="${x.id}">${schName(x.nr)}${x.zu ? ' · beendet' : ' · läuft'}</button>`).join('')}</div>
     <div class="mut">Kasse: ${esc(name('ma', s.ma))} · Masseure: ${s.mas.map(m => esc(name('mas', m))).join(', ') || '–'}</div>
     <div class="row"><button data-act="bearbForm">Schicht bearbeiten</button>${s.nr === 1 ? '<button data-act="wechselForm">Schicht wechseln</button>' : ''}<button data-act="schliessen">Schicht schließen</button></div>
     <div class="gegangen"><div class="mut">Gegangene Gäste (${weg}):</div>${zeilen(false, 'Noch niemand gegangen.')}</div></div>`;
@@ -1308,6 +1311,13 @@ function masseurText(sch, mid) {
 // Die Abrechnung ist zweigeteilt: „Sauna“ und „Massage“ (je Masseur). Die Sauna nimmt alle Einnahmen gesammelt ein (alle Zahlungen,
 // alle Trinkgelder). Die Massagen stehen in der Sauna-Abrechnung unten mit der Rechnung der Masseure über 70 % (die Sauna behält 30 %);
 // die Abrechnung Massage je Masseur nennt seine Massagen, die Rechnung an die Sauna und sein Trinkgeld.
+// Warentyp einer Buchung: l Leistung, m Massage, w Ware. Neue Buchungen tragen ihn selbst; bei älteren schließt die Abrechnung
+// aus dem Masseur (Massage) bzw. daraus, ob es den Namen bei den Waren oder bei den Leistungen gibt.
+function warentyp(b) {
+  if (b.typ) return b.typ;
+  if (b.masseur) return 'm';
+  return S.war.some(w => w.name === b.name) && !S.lei.some(l => l.name === b.name) ? 'w' : 'l';
+}
 function saunaDaten(sch) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const buch = sch.flatMap(s => s.buch.filter(b => !b.uebernommen).map(b => ({ ...b, s })));
@@ -1364,12 +1374,20 @@ function abrechnung(sch) {
   <tr><th>Gesamt</th><th class="r">${eur(summe(zahl, x => x.betrag))}</th><th class="r">${eur(summe(zahl, x => x.tip))}</th><th class="r">${eur(summe(zahl, x => x.betrag + x.tip))}</th></tr></table>
   <div class="mut" style="margin-top:6px">Die Sauna nimmt alle Einnahmen gesammelt ein, auch die für Massagen.</div></div>`;
 
-  // Umsatz je Position – Leistungen und Waren
-  const pos = {};
-  sbu.forEach(b => { const k = b.name; (pos[k] = pos[k] || { m: 0, u: 0 }); pos[k].m += b.menge; pos[k].u += b.menge * b.preis; });
-  h += `<div class="card"><h3>Umsatz je Leistung / Ware</h3><table><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>
-  ${Object.entries(pos).map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="3">Keine Leistungen oder Waren.</td></tr>'}
-  <tr><th>Gesamt</th><th></th><th class="r">${eur(saunaU)}</th></tr></table></div>`;
+  // Umsatz nach Warentyp: Leistungen, Massagen, Waren – je mit den Positionen und einer Zwischensumme
+  const typen = [['l', 'Leistungen'], ['m', 'Massagen'], ['w', 'Waren']];
+  const alleB = [...sbu, ...d.mbu];
+  const typTeil = ([t, titel]) => {
+    const bu = alleB.filter(b => warentyp(b) === t), pos = {};
+    bu.forEach(b => { (pos[b.name] = pos[b.name] || { m: 0, u: 0 }); pos[b.name].m += b.menge; pos[b.name].u += b.menge * b.preis; });
+    const e = Object.entries(pos);
+    return `<tr><th colspan="3" style="background:var(--rg-${t})">${titel}</th></tr>` +
+      (e.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${v.m}</td><td class="r">${eur(v.u)}</td></tr>`).join('') || '<tr><td class="mut" colspan="3">–</td></tr>') +
+      `<tr><td><b>Summe ${titel}</b></td><td class="r"><b>${summe(bu, b => b.menge)}</b></td><td class="r"><b>${eur(summe(bu, b => b.menge * b.preis))}</b></td></tr>`;
+  };
+  h += `<div class="card"><h3>Umsatz nach Warentyp</h3><table class="typen"><tr><th>Position</th><th class="r">Menge</th><th class="r">Umsatz</th></tr>
+  ${typen.map(typTeil).join('')}
+  <tr><th>Gesamt</th><th></th><th class="r">${eur(saunaU + massU)}</th></tr></table></div>`;
 
   // Massagen: Umsatz und die Rechnungen der Masseure an die Sauna
   h += `<div class="card"><h3>Massagen – Rechnungen der Masseure (${MASSEUR_PROZENT} % vom Preis, ohne Trinkgeld)</h3>` + (mids.length ? `<table><tr><th>Masseur</th><th>Massage</th><th class="r">Anzahl</th><th class="r">Umsatz</th><th class="r">Rechnung</th></tr>` +
@@ -1439,10 +1457,10 @@ function vStamm() {
 /* ---------- Aktionen ---------- */
 // Gleicher Artikel beim selben Gast (und gleichem Masseur) erhöht die Menge, statt eine weitere Zeile anzulegen.
 // Aus der Vorschicht Übernommenes bleibt unberührt, es ist dort schon abgerechnet.
-function bucheZeile(s, l, masseur) {
+function bucheZeile(s, l, masseur, typ) {
   const da = s.buch.find(b => b.gast === U.gast && !b.uebernommen && !b.auto && b.name === l.name && b.preis === l.preis && (b.masseur || '') === masseur);
   if (da) da.menge += 1;
-  else s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr() });
+  else s.buch.push({ id: id(), gast: U.gast, name: l.name, preis: l.preis, menge: 1, masseur, zeit: uhr(), typ });
 }
 // Massageübersicht eines Masseurs: seine Massagen in der aktuellen Schicht. In der Abendschicht kommen die Massagen dazu, die
 // am selben Tag in der Tagesschicht entgegengenommen wurden – getrennt aufgeführt, denn abgerechnet sind sie dort.
@@ -1627,6 +1645,7 @@ const A = {
   pop: v => { U.pop = U.pop === v ? null : v; },
   gastTop: (v, el) => { U.gast = v; if (el && el.dataset.sch) U.sch = el.dataset.sch; U.gastZu = false; U.extra = false; U.tab = 'kasse'; U.form = null; },
   neuGastTop: () => { U.tab = 'kasse'; U.neu = true; U.form = null; },
+  schAbr: v => { U.abr = v; U.fuer = 'ges'; U.tab = 'abr'; U.gast = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   masUe: v => { U.masUe = v; },
@@ -1737,12 +1756,12 @@ const A = {
       if (!s.mas.length) return alert('In dieser Schicht ist kein Masseur eingetragen. Bitte unter „Schicht bearbeiten“ einen Masseur ergänzen.');
       U.masFrage = l.id; return;
     }
-    bucheZeile(s, l, '');
+    bucheZeile(s, l, '', el.dataset.k === 'war' ? 'w' : 'l');
   },
   masBuche: v => {
     const s = schicht(), l = S.lei.find(x => x.id === U.masFrage); U.masFrage = null;
     if (!s || !U.gast || !l) return;
-    U.mas = v; bucheZeile(s, l, v);
+    U.mas = v; bucheZeile(s, l, v, 'm');
   },
   masAb: () => { U.masFrage = null; },
   // Bei Menge > 1 nimmt ✕ eine Einheit weg, sonst die Zeile.
