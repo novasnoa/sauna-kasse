@@ -945,16 +945,23 @@ function gLade() {
 // Der echte Plan lässt sich weiter als eigenes Fenster öffnen (dort bleibt man angemeldet wie sonst auch).
 const SCHICHTPLAN_URL = 'https://sauna-schichtplan.sauna-schichtplan.workers.dev/';
 const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
+// Es darf immer nur EINE Anmeldeanfrage bei Google laufen. Grund: Die Freigabe öffnet ein Google-Fenster zur Kontenwahl. Der Abgleich im
+// Hintergrund (2,5 s nach jedem Speichern, alle 30 s, beim Zurückkehren in die App) fragt sonst gleichzeitig „still“ (prompt: none) an – und
+// das schließt das Fenster nach wenigen Sekunden wieder, bevor man ein Konto wählen konnte. Wer später kommt, wartet auf die laufende Anfrage
+// und prüft dann erneut (meist reicht dann der frische Token).
+let gTokP = null;
 function gToken(interaktiv, mail) {
   if (G.tok && Date.now() < G.exp - 60000 && (!mail || G.tokMail)) return Promise.resolve();
-  return gLade().then(() => new Promise((ok, no) => {
+  if (gTokP) return gTokP.then(() => {}, () => {}).then(() => gToken(interaktiv, mail));
+  gTokP = gLade().then(() => new Promise((ok, no) => {
     const c = google.accounts.oauth2.initTokenClient({
       client_id: G.cid, scope: 'https://www.googleapis.com/auth/drive.appdata' + (mail ? ' ' + MAIL_RECHT : ''),
       callback: r => { if (r.access_token) { G.tok = r.access_token; G.tokMail = !!mail && (r.scope || MAIL_RECHT).includes('gmail.send'); G.exp = Date.now() + (r.expires_in || 3600) * 1000; ok(); } else no(new Error('login')); },
       error_callback: () => no(new Error('login'))
     });
     c.requestAccessToken({ prompt: interaktiv ? '' : 'none' });
-  }));
+  })).finally(() => { gTokP = null; });
+  return gTokP;
 }
 async function gApi(url, opt = {}) {
   const r = await fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + G.tok } });
