@@ -78,7 +78,8 @@ leer bleiben. Über dem Kalender steht je Schicht, wer laut Schichtplan eingetei
 mit „Speichern“, „Abbrechen“ und „Löschen“. Der Termin selbst zählt bei der Prüfung auf Überschneidung nicht mit; bei einer Kollision bleibt das Fenster offen.
 Im Kasten stehen Symbol, Zeitraum und Name/Telefon (gekürzt mit „…“, vollständig im Tooltip).
 
-**Mehrwertsteuer der Masseur*innen:** Stammdaten → Masseur*innen → „mehrwertsteuerpflichtig (19 %)“ (je Person; `ust`). Der Rechnungsbetrag (70 % vom
-Massagepreis) ist ein **Bruttobetrag** und für beide Gruppen gleich hoch: Pflichtige stellen ihn als „netto + 19 % MwSt“ in Rechnung (aufgeteilt in Mail,
-Abrechnung Massage und Sauna-Abrechnung), Nichtpflichtige „ohne Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG)“. In der Sauna-Abrechnung steht zusätzlich
-die darin enthaltene Mehrwertsteuer der Masseur*innen. Standard für alle ohne Haken: nicht pflichtig.
+**Mehrwertsteuer der Masseur*innen:** Stammdaten → Masseur*innen → „mehrwertsteuerpflichtig (19 %)“ (je Person; `ust`). Die Preise sind brutto (19 % MwSt enthalten),
+die Sauna führt die Mehrwertsteuer auf den ganzen Umsatz ab. Pflichtige Masseur*in: 70 % vom **Bruttopreis**, Rechnung als „netto + 19 % MwSt“ ausgewiesen.
+Nicht pflichtige Masseur*in: 70 % vom **Nettopreis** (Preis ÷ 1,19), Rechnung ohne Umsatzsteuer (§ 19 UStG). Beides ergibt denselben Nettobetrag für die Sauna
+(Beispiel 100 €: Pflichtige 70,00 € brutto = 58,82 € netto + 11,18 € MwSt; Nichtpflichtige 58,82 €). Gerundet wird je Buchungszeile (`masseurAnteil`).
+„Bleibt der Sauna“ ist der Rest des Bruttoumsatzes, aus dem die Sauna die Mehrwertsteuer noch abführt. Wer nicht angehakt ist, gilt als nicht pflichtig.
