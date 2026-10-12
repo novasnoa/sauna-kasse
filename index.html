@@ -1506,10 +1506,10 @@ const TERMIN_SCHLUESSEL = 'y81j-UvH1sSce7r3rHgqn7d7_dmJ1FgS', TERMIN_SENT = 'sk-
 // (so zählt auch der Schichtplan). Deshalb gibt es bei der Reservierung keine Schichtwahl.
 const terminNr = zeit => { const [h, m] = String(zeit).split(':').map(Number), min = h * 60 + m; return min >= 720 && min <= 1110 ? 1 : 2; };
 const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
-// Kalender der Reservierung: Raster von 5 Minuten, 12:00 bis 24:00; fünf Längen zur Wahl. Es gibt nie zwei Massagen zur selben Zeit – unabhängig davon,
+// Kalender der Reservierung: Raster von 5 Minuten, 12:00 bis 24:00; fünf Längen zur Wahl (30, 40, 45, 60, 90). Es gibt nie zwei Massagen zur selben Zeit – unabhängig davon,
 // wer massiert (das legt der Schichtplan fest): ein Termin belegt [Beginn, Beginn + Dauer), direkt aneinander anschließen geht.
 // Ältere Termine ohne Dauer zählen als 60 Minuten.
-const TK_VON = 720, TK_BIS = 1440, TK_RASTER = 5, TK_LAENGEN = [30, 45, 60, 90, 120];
+const TK_VON = 720, TK_BIS = 1440, TK_RASTER = 5, TK_LAENGEN = [30, 40, 45, 60, 90];
 const zeitMin = z => { const [h, m] = String(z).split(':').map(Number); return h * 60 + m; };
 const minZeit = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const terDauer = x => x.dauer || 60;

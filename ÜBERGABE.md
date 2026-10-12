@@ -60,7 +60,7 @@ ersetzt seinen Stand); offline wird später nachgeholt. Der Schlüssel ist fest 
 `KASSE_SCHLUESSEL`. Er erlaubt nur, Massagetermine in den Schichtplan zu schreiben, nichts aus der Kasse zu lesen. Wechsel: beide Stellen ändern.
 Der Plan muss dafür ausgeliefert sein, siehe `ANLEITUNG.md` im Schichtplan-Repo.
 
-**Kalender bei „Termine“:** Tag wählen, Länge wählen (30, 45, 60, 90, 120 Min.; `TK_LAENGEN` im Code), Zeit im 5-Minuten-Raster antippen
+**Kalender bei „Termine“:** Tag wählen, Länge wählen (30, 40, 45, 60, 90 Min.; `TK_LAENGEN` im Code), Zeit im 5-Minuten-Raster antippen
 (12:00–24:00). Tages- oder Abendschicht ergibt sich aus dem Beginn (12:00–18:30 / danach). Belegte Zeiten und solche, an denen die Länge
 nicht mehr passt, sind ausgegraut. Es gibt nie zwei Massagen zur selben Zeit, unabhängig vom Masseur; direkt aneinander anschließen geht.
 Das wird beim Speichern noch einmal geprüft (ein anderes Gerät kann dieselbe Zeit inzwischen vergeben haben). Je Termin: `dauer`, `gast`
