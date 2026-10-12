@@ -278,6 +278,9 @@ const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
 const UST_PROZENT = 19;
 const masUst = mid => !!(S.mas.find(x => x.id === mid) || {}).ust;
 const ustNetto = brutto => Math.round(brutto * 100 / (100 + UST_PROZENT));
+// Rechnung einer Masseur*in: 70 % vom Preis (inkl. MwSt) PLUS Trinkgeld – auch auf das Trinkgeld fällt Mehrwertsteuer an. Mit Umsatzsteuer: der
+// Gesamtbetrag brutto. Ohne Umsatzsteuer: derselbe Betrag ohne die 19 % (die Sauna führt sie ab). Gerundet wird die Gesamtsumme, nicht jede Zeile.
+const rechnungSumme = (reMit, ti) => { const mit = reMit + ti, netto = ustNetto(mit); return { mit, netto, ust: mit - netto, ohne: netto, massage: reMit, tk: ti }; };
 // Zeilen für die Rechnung eines Masseurs über den Betrag re
 const rechnungZeilen = (re, ust) => ust
   ? [`${eur(re)} brutto`, `davon netto ${eur(ustNetto(re))} + ${UST_PROZENT} % MwSt ${eur(re - ustNetto(re))}`]
@@ -1372,7 +1375,7 @@ function masseurDaten(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const bu = sch.flatMap(s => s.buch.filter(b => b.masseur === mid && !b.uebernommen).map(b => ({ ...b, s })));
   const tr = sch.flatMap(s => s.zahl.flatMap(z => tipVerteilung(s, z).filter(x => x.an === 'm:' + mid).map(x => ({ s, z, betrag: x.betrag }))));
-  return { bu, tr, um: summe(bu, b => b.menge * b.preis), ti: summe(tr, t => t.betrag), re: summe(bu, masseurAnteil), reMit: summe(bu, anteilMit), reOhne: summe(bu, anteilOhne) };
+  return { bu, tr, um: summe(bu, b => b.menge * b.preis), ti: summe(tr, t => t.betrag), re: summe(bu, masseurAnteil), reMit: summe(bu, anteilMit) };
 }
 function masseurText(sch, mid) {
   const d = masseurDaten(sch, mid), nm = name('mas', mid);
@@ -1381,12 +1384,9 @@ function masseurText(sch, mid) {
     (d.bu.map(b => `  ${schName(b.s.nr)}, ${b.zeit}, Schlüssel ${gastText(b.s, b.gast)}: ${b.name} ${eur(b.menge * b.preis)}`).join('\n') || '  keine') +
     `\nUmsatz Massagen: ${eur(d.um)}\n\nTrinkgeld:\n` +
     (d.tr.map(t => `  ${schName(t.s.nr)}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
-    `\nTrinkgeld gesamt: ${eur(d.ti)}\n\n` +
-    `Rechnung mit Umsatzsteuer: ${eur(d.reMit)} (netto ${eur(ustNetto(d.reMit))} + ${UST_PROZENT} % MwSt ${eur(d.reMit - ustNetto(d.reMit))})\n` +
-    `Rechnung ohne Umsatzsteuer: ${eur(d.reOhne)}\n` +
-    `(${MASSEUR_PROZENT} % vom Preis inkl. MwSt bzw. vom Nettopreis, ohne Trinkgeld)\n\n` +
-    `Gesamtsumme mit Umsatzsteuer (Rechnung + Trinkgeld): ${eur(d.reMit + d.ti)}\n` +
-    `Gesamtsumme ohne Umsatzsteuer (Rechnung + Trinkgeld): ${eur(d.reOhne + d.ti)}\n`;
+    `\nTrinkgeld gesamt: ${eur(d.ti)}\n\n` + (r => 
+    `Rechnung mit Umsatzsteuer (Gesamtsumme): ${eur(r.mit)}\n  Massagen ${MASSEUR_PROZENT} % vom Preis ${eur(r.massage)} + Trinkgeld ${eur(r.tk)}; netto ${eur(r.netto)} + ${UST_PROZENT} % MwSt ${eur(r.ust)}\n` +
+    `Rechnung ohne Umsatzsteuer: ${eur(r.ohne)}\n  (Gesamtsumme ohne die ${UST_PROZENT} % Mehrwertsteuer – auch auf das Trinkgeld; die Sauna führt sie ab)\n`)(rechnungSumme(d.reMit, d.ti));
 }
 // Die Abrechnung ist zweigeteilt: „Sauna“ und „Massage“ (je Masseur). Die Sauna nimmt alle Einnahmen gesammelt ein (alle Zahlungen,
 // alle Trinkgelder). Die Massagen stehen in der Sauna-Abrechnung unten mit der Rechnung der Masseure über 70 % (die Sauna behält 30 %);
@@ -1406,9 +1406,10 @@ function saunaDaten(sch) {
   const tv = zahl.flatMap(z => tipVerteilung(z.s, z));
   const mids = [...new Set(mbu.map(b => b.masseur))];
   const masseurJe = mids.map(m => ({ m, bu: mbu.filter(b => b.masseur === m) }))
-    .map(x => ({ ...x, anz: summe(x.bu, b => b.menge), preis: summe(x.bu, b => b.menge * b.preis), re: summe(x.bu, masseurAnteil), sauna: summe(x.bu, saunaAnteil) }));
+    .map(x => { const mit = summe(x.bu, anteilMit), ti = summe(tv.filter(t => t.an === 'm:' + x.m), t => t.betrag), re = masUst(x.m) ? mit : ustNetto(mit), preis = summe(x.bu, b => b.menge * b.preis);
+      return { ...x, anz: summe(x.bu, b => b.menge), preis, mit, ti, re, sauna: preis - re }; });
   return { summe, buch, sbu, mbu, zahl, tv, mids, masseurJe, saunaU: summe(sbu, b => b.menge * b.preis), massU: summe(mbu, b => b.menge * b.preis),
-    rechnungU: summe(mbu, masseurAnteil), behaltU: summe(mbu, saunaAnteil) };
+    rechnungU: summe(masseurJe, x => x.re), behaltU: summe(masseurJe, x => x.sauna) };
 }
 function gesamtText(sch) {
   const d = saunaDaten(sch), { summe, zahl, tv, saunaU, massU, rechnungU, behaltU, masseurJe } = d;
@@ -1423,7 +1424,7 @@ function gesamtText(sch) {
 function masseurAbrechnung(sch, mid) {
   const summe = (a, f) => a.reduce((x, y) => x + f(y), 0);
   const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
-  const { bu, tr, um, ti, re, reMit, reOhne } = masseurDaten(sch, mid);
+  const { bu, tr, um, ti, re, reMit } = masseurDaten(sch, mid);
   const m = kontakt('mas', mid);
   return `<div class="card seite"><h2>Abrechnung Masseur ${esc(name('mas', mid))} – ${datumDe(sch[0].datum)}</h2>
   <div class="mut">${sch.map(s => schName(s.nr)).join(' · ')}${m.email ? ' · ' + esc(m.email) : ''}${m.tel ? ' · ☎ ' + esc(m.tel) : ''}${m.adresse ? ' · 🏠 ' + esc(m.adresse) : ''}</div>
@@ -1435,14 +1436,13 @@ function masseurAbrechnung(sch, mid) {
   <h3>Trinkgeld</h3>` + (tr.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Art</th><th class="r">Betrag</th></tr>
   ${tr.map(t => `<tr><td>${schName(t.s.nr)}</td><td>${t.z.zeit}</td><td>${esc(gastText(t.s, t.z.gast))}</td><td>${esc(t.z.art)}</td><td class="r">${eur(t.betrag)}</td></tr>`).join('')}
   <tr><th colspan="4">Trinkgeld gesamt</th><th class="r">${eur(ti)}</th></tr></table>` : '<span class="mut">Kein Trinkgeld.</span>') + `
-  <h3>Summe</h3><table><tr><td>Umsatz Massagen</td><td class="r">${eur(um)}</td></tr><tr><td>Trinkgeld gesamt</td><td class="r">${eur(ti)}</td></tr>
-  <tr><th>Rechnung mit Umsatzsteuer</th><th class="r">${eur(reMit)}</th></tr><tr><td class="mut" colspan="2">netto ${eur(ustNetto(reMit))} + ${UST_PROZENT} % MwSt ${eur(reMit - ustNetto(reMit))}</td></tr>
-  <tr><th>Rechnung ohne Umsatzsteuer</th><th class="r">${eur(reOhne)}</th></tr>
-  <tr><td class="mut" colspan="2">${MASSEUR_PROZENT} % vom Preis inkl. MwSt bzw. vom Nettopreis, ohne Trinkgeld</td></tr>
-  <tr><th>Gesamtsumme mit Umsatzsteuer (Rechnung + Trinkgeld)</th><th class="r">${eur(reMit + ti)}</th></tr>
-  <tr><th>Gesamtsumme ohne Umsatzsteuer (Rechnung + Trinkgeld)</th><th class="r">${eur(reOhne + ti)}</th></tr></table>
+  <h3>Summe</h3>` + (r => `<table><tr><td>Umsatz Massagen</td><td class="r">${eur(um)}</td></tr>
+  <tr><td>Massagen ${MASSEUR_PROZENT} % vom Preis (inkl. MwSt)</td><td class="r">${eur(r.massage)}</td></tr><tr><td>Trinkgeld gesamt</td><td class="r">${eur(r.tk)}</td></tr>
+  <tr><th>Rechnung mit Umsatzsteuer (Gesamtsumme)</th><th class="r">${eur(r.mit)}</th></tr><tr><td class="mut" colspan="2">netto ${eur(r.netto)} + ${UST_PROZENT} % MwSt ${eur(r.ust)}</td></tr>
+  <tr><th>Rechnung ohne Umsatzsteuer</th><th class="r">${eur(r.ohne)}</th></tr>
+  <tr><td class="mut" colspan="2">Gesamtsumme ohne die ${UST_PROZENT} % Mehrwertsteuer – sie gilt auch für das Trinkgeld; die Sauna führt sie ab</td></tr></table>`)(rechnungSumme(reMit, ti)) + `
   <p style="margin-top:28px">Trinkgeld erhalten: ______________________ (Unterschrift)</p>
-  <div class="vermerk"><b>Rechnung an die Sauna:</b> Je nach Steuerstatus gilt die Rechnung mit oder ohne Umsatzsteuer (siehe oben). Das Trinkgeld ist nicht Teil der Rechnung.
+  <div class="vermerk"><b>Rechnung an die Sauna:</b> Je nach Steuerstatus gilt die Rechnung mit oder ohne Umsatzsteuer (siehe oben). Das Trinkgeld ist Teil der Rechnung (auch darauf fällt Mehrwertsteuer an).
   Die Sauna hat alle Einnahmen gesammelt eingenommen; die Rechnung wird zu einem späteren Zeitpunkt gestellt.</div></div>`;
 }
 
@@ -1503,10 +1503,10 @@ function abrechnung(sch) {
       const ns = [...new Set(x.bu.map(b => b.name))];
       return ns.map((n, i) => { const y = x.bu.filter(b => b.name === n); return `<tr><td>${i ? '' : esc(name('mas', x.m))}</td><td>${esc(n)}</td><td class="r">${summe(y, b => b.menge)}</td><td class="r">${eur(summe(y, b => b.menge * b.preis))}</td><td class="r">${eur(summe(y, masseurAnteil))}</td></tr>`; }).join('') +
         `<tr><td></td><th>Summe ${esc(name('mas', x.m))}</th><th class="r">${x.anz}</th><th class="r">${eur(x.preis)}</th><th class="r">${eur(x.re)}</th></tr>` +
-        (masUst(x.m) ? `<tr><td></td><td colspan="3" class="mut">mit MwSt: netto ${eur(ustNetto(x.re))} + ${UST_PROZENT} % ${eur(x.re - ustNetto(x.re))}</td><td></td></tr>` : `<tr><td></td><td colspan="3" class="mut">ohne Umsatzsteuer (§ 19 UStG)</td><td></td></tr>`);
+        (r => masUst(x.m) ? `<tr><td></td><td colspan="3" class="mut">Rechnung inkl. Trinkgeld (${eur(x.ti)}): ${eur(r.mit)} brutto (netto ${eur(r.netto)} + ${UST_PROZENT} % MwSt ${eur(r.ust)})</td><td></td></tr>` : `<tr><td></td><td colspan="3" class="mut">Rechnung inkl. Trinkgeld (${eur(x.ti)}), ohne Umsatzsteuer (§ 19 UStG): ${eur(r.ohne)}</td><td></td></tr>`)(rechnungSumme(x.mit, x.ti));
     }).join('') + `<tr><th colspan="3">Massagen gesamt</th><th class="r">${eur(massU)}</th><th class="r">${eur(rechnungU)}</th></tr>
     <tr><th colspan="4">Rechnungen der Masseure an die Sauna (${MASSEUR_PROZENT} %)</th><th class="r">${eur(rechnungU)}</th></tr>
-    ${(() => { const v = masseurJe.filter(x => masUst(x.m)).reduce((a, x) => a + x.re - ustNetto(x.re), 0); return v ? `<tr><td colspan="4" class="mut">darin enthaltene Mehrwertsteuer der Masseur*innen (${UST_PROZENT} %)</td><td class="r">${eur(v)}</td></tr>` : ''; })()}
+    ${(() => { const v = masseurJe.filter(x => masUst(x.m)).reduce((a, x) => a + rechnungSumme(x.mit, x.ti).ust, 0); return v ? `<tr><td colspan="4" class="mut">darin enthaltene Mehrwertsteuer der Masseur*innen (${UST_PROZENT} %)</td><td class="r">${eur(v)}</td></tr>` : ''; })()}
     <tr><th colspan="4">Bleibt der Sauna (Rest, vor Abführung der Mehrwertsteuer)</th><th class="r">${eur(behaltU)}</th></tr></table>` : '<span class="mut">Keine Massagen.</span>') +
     `<div class="mut" style="margin-top:6px">Die Masseure stellen diese Rechnungen später an die Sauna.</div></div>`;
 

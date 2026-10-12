@@ -84,7 +84,7 @@ Nicht pflichtige Masseur*in: 70 % vom **Nettopreis** (Preis ÷ 1,19), Rechnung o
 (Beispiel 100 €: Pflichtige 70,00 € brutto = 58,82 € netto + 11,18 € MwSt; Nichtpflichtige 58,82 €). Gerundet wird je Buchungszeile (`masseurAnteil`).
 „Bleibt der Sauna“ ist der Rest des Bruttoumsatzes, aus dem die Sauna die Mehrwertsteuer noch abführt. Wer nicht angehakt ist, gilt als nicht pflichtig.
 
-In der Abrechnung Massage je Masseur*in (Ansicht und Mail) stehen unter den Listen der Massagen und des Trinkgelds beide Beträge: „Rechnung mit Umsatzsteuer“
-(70 % vom Preis inkl. MwSt, mit netto + MwSt) und „Rechnung ohne Umsatzsteuer“ (70 % vom Nettopreis), danach „Gesamtsumme mit/ohne Umsatzsteuer
-(Rechnung + Trinkgeld)“. Das Trinkgeld ist nicht Teil der Rechnung, geht aber in die Gesamtsumme ein. Die Sauna-Abrechnung rechnet weiter mit dem Kennzeichen
-„mehrwertsteuerpflichtig“ der jeweiligen Person.
+In der Abrechnung Massage je Masseur*in (Ansicht und Mail) stehen unter den Listen der Massagen und des Trinkgelds beide Rechnungsbeträge. Auch auf das Trinkgeld fällt
+Mehrwertsteuer an, deshalb gehört es in die Rechnung: **mit Umsatzsteuer** = 70 % vom Preis (inkl. MwSt) + Trinkgeld, ausgewiesen als netto + 19 % MwSt; **ohne Umsatzsteuer**
+= dieselbe Gesamtsumme ohne die 19 % (`rechnungSumme`; Beispiel 100 € Massage + 10 € Trinkgeld: 80,00 € bzw. 67,23 €). Gerundet wird die Gesamtsumme. Die Sauna-Abrechnung
+rechnet je Person mit dem Kennzeichen „mehrwertsteuerpflichtig“; die Spalte „Rechnung“ dort nennt die Massagen ohne Trinkgeld, darunter steht die Rechnung inkl. Trinkgeld.
