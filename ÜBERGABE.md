@@ -71,5 +71,5 @@ dem Namen / „frei“ die Zahl der Termine der Schicht.
 Im Kalender ist jede Massage ein umrandeter Kasten mit dem Massage-Symbol und dem Zeitraum („15:30–16:15“). Name und Telefon gehen gemeinsam im
 Feld `gast` an den Schichtplan („Frau Meier · 0171 …“, höchstens 80 Zeichen, gekürzt wird der Name); dessen Tabelle bleibt unverändert.
 
-Name und Telefon sind ein Feld (`gast`) und werden beim Reservieren in einem kleinen Fenster erfragt: „Name und Telefon eintragen?“ → OK öffnet das
-Eingabefeld (Tastatur) mit „Reservieren“ daneben, „Überspringen“ reserviert ohne Angabe. Über dem Kalender steht je Schicht, wer laut Schichtplan eingeteilt ist (aus plan.json; freie Plätze rot).
+Name und Telefon sind ein Feld (`gast`): „Reservieren“ öffnet sofort ein kleines Fenster mit Eingabefeld (Tastatur) und „Reservieren“ daneben; das Feld darf
+leer bleiben. Über dem Kalender steht je Schicht, wer laut Schichtplan eingeteilt ist (aus plan.json; freie Plätze rot).

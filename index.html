@@ -1567,12 +1567,9 @@ function terBuche(gast) {
 function vTerPop() {
   const wo = U.terStart !== null ? `${datumDe(U.terDatum)} · ${minZeit(U.terStart)}–${minZeit(U.terStart + (U.terDauer || 60))}` : '';
   return `<div id="ter-pop" class="modal" style="z-index:30;align-items:center" role="dialog" aria-label="Name und Telefon"><div class="card" style="width:min(460px,100%)">
-    ${U.terPop === 'frage'
-      ? `<b>Name und Telefon eintragen?</b><div class="mut">${wo}</div>
-         <div class="row" style="margin-top:10px"><button class="p" data-act="terOk">OK</button><button data-act="terSkip">Überspringen</button><button data-act="terPopZu" style="margin-left:auto">Zurück</button></div>`
-      : `<b>Name / Telefon</b><div class="mut">${wo}</div>
-         <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input id="t-gast" placeholder="Name / Telefon" autocomplete="off" style="flex:1;min-width:0"><button class="p" data-act="terGo">Reservieren</button></div>
-         <div class="row"><button data-act="terPopZu">Abbrechen</button></div>`}
+    <b>Name / Telefon</b> <span class="mut">(optional)</span><div class="mut">${wo}</div>
+    <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input id="t-gast" placeholder="Name / Telefon" autocomplete="off" style="flex:1;min-width:0"><button class="p" data-act="terGo">Reservieren</button></div>
+    <div class="row"><button data-act="terPopZu">Abbrechen</button></div>
   </div></div>`;
 }
 function vTermine() {
@@ -1931,16 +1928,14 @@ const A = {
   terTag: v => { behalte(); const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
   terLaenge: v => { behalte(); U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
   terSlot: v => { behalte(); U.terStart = +v; return 'ter'; },
-  // Reservieren: erst prüfen, dann in einem kleinen Fenster nach Name und Telefon fragen (OK → Eingabefeld mit Tastatur und „Reservieren“
-  // daneben; Überspringen → ohne Angabe). Das Fenster steht über dem Kalender, damit dessen Stand erhalten bleibt.
+  // Reservieren: erst prüfen, dann sofort ein kleines Fenster mit Eingabefeld (Tastatur) und „Reservieren“ daneben. Das Feld darf leer
+  // bleiben. Das Fenster steht über dem Kalender, damit dessen Stand erhalten bleibt.
   terminNeu: () => {
     const datum = U.terDatum || heute(), dauer = U.terDauer || 60;
     if (U.terStart === null || U.terStart === undefined) { alert('Bitte im Kalender eine Zeit antippen.'); return false; }
     if (!terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; return; }
-    U.terPop = 'frage';
+    U.terPop = 'eingabe';
   },
-  terOk: () => { U.terPop = 'eingabe'; },
-  terSkip: () => { terBuche(''); },
   terGo: () => { terBuche($v('t-gast')); },
   terPopZu: () => { U.terPop = null; },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
@@ -2137,7 +2132,7 @@ document.addEventListener('click', e => {
   speichern(); render();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.id === 't-gast' && U.terPop === 'eingabe') { e.preventDefault(); A.terGo(); speichern(); render(); return; }
+  if (e.key === 'Enter' && e.target.id === 't-gast' && U.terPop) { e.preventDefault(); A.terGo(); speichern(); render(); return; }
   if (!$('pin-punkte') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
   if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk(); else if (e.key === 'Escape') { A.pinAb(); render(); }
 });
