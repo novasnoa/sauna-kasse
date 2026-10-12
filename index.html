@@ -227,6 +227,10 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 
 .tk.weg{background:#eeebe6;color:#bbb}
 .tk.sel{background:var(--acc);color:#fff}
+.tk-schichten{display:grid;gap:4px}
+.tk-sch{display:flex;align-items:center;gap:10px}
+.tk-sch>span:first-child{flex:0 0 235px;color:var(--mut);font-size:14px;white-space:nowrap}
+.tk-wer{display:flex;gap:2px;flex-wrap:wrap}
 .tz{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:#222;color:#fff;font-size:12px;font-weight:700}
 .noprint{}
 .printonly{display:none}
@@ -262,7 +266,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { terFrage: false, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -316,7 +320,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname', 't-gast', 't-tel'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname', 't-gast'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -720,7 +724,7 @@ function render() {
   const terSc = U.termine && $('termine-modal') ? $('termine-modal').scrollTop : 0;
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
   if (U.plan) $('app').insertAdjacentHTML('beforeend', vPlan());
-  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; }
+  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; if (U.terFrage && $('t-gast')) $('t-gast').focus(); }
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
@@ -1544,6 +1548,13 @@ async function terminPush(erzwingen) {
 }
 addEventListener('online', () => terminPush());
 setInterval(() => terminPush(), 5 * 60000);
+// Wer laut Schichtplan an diesem Tag in der Schicht steht (aus plan.json, siehe planLaden); freie Plätze rot.
+function eingeteilt(datum, art) {
+  if (!PLAN) return '<span class="mut">Plan nicht geladen</span>';
+  const l = PLAN.shifts.filter(x => x.date === datum && x.shiftType === art);
+  if (!l.length) return '<span class="mut">kein Plan</span>';
+  return l.flatMap(x => { const c = x.claims.map(k => `<span class="pn" style="--c:${/^#[0-9a-f]{3,8}$/i.test(k.color) ? k.color : '#999'}">${esc(String(k.name).replace(/\s+massage$/i, ''))}</span>`); for (let i = x.claims.length; i < (x.slots || 1); i++) c.push('<span class="pn frei">frei</span>'); return c; }).join('');
+}
 function vTermine() {
   const liste = terminAnzeige();
   const datum = U.terDatum || (U.terDatum = heute()), dauer = U.terDauer || 60, sel = U.terStart;
@@ -1576,12 +1587,13 @@ function vTermine() {
   return `<div id="termine-modal" class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(860px,100%)">
     <div class="row"><b>Massagetermin reservieren</b></div>
     <div class="row"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}" style="flex:1"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
-    <div class="row"><input id="t-gast" placeholder="Name / Hinweis" style="flex:2;min-width:180px"><input id="t-tel" type="tel" placeholder="Telefon" style="flex:1;min-width:140px"></div>
+    <div class="row"><input id="t-gast" placeholder="Name / Telefon" style="flex:1;min-width:220px" autocomplete="off"></div>
+    ${U.terFrage ? '<div class="warn">Name oder Telefon des Gastes eintragen – oder ohne Angabe reservieren.</div>' : ''}
     <div class="mut">Länge</div>
     <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
-    <div class="row mut" style="gap:14px"><span><span class="tk-leg"></span> Tagesschicht 12:00–18:30</span><span><span class="tk-leg abend"></span> Abendschicht 18:30–24:00</span><span>(wird nach der Uhrzeit erkannt)</span></div>
+    <div class="tk-schichten">${[['frueh', 'Tagesschicht 12:00–18:30', ''], ['spaet', 'Abendschicht 18:30–24:00', 'abend']].map(([art, tit, kl]) => `<div class="tk-sch"><span><span class="tk-leg ${kl}"></span> ${tit}</span><span class="tk-wer">${eingeteilt(datum, art)}</span></div>`).join('')}</div>
     <div class="tk-kal">${kal}</div>
-    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><button class="p" data-act="terminNeu" style="margin-left:auto">Reservieren</button></div>
+    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><span style="margin-left:auto;display:flex;gap:8px">${U.terFrage ? '<button data-act="terminOhne">Ohne Angabe reservieren</button>' : ''}<button class="p" data-act="terminNeu">Reservieren</button></span></div>
     <h3>Termine am ${wt(datum)} ${datumDe(datum)} (${tagListe.length})</h3>
     ${tagListe.map(zeile).join('') || '<div class="mut">Noch keine Termine.</div>'}
     <div class="mut" style="margin-top:10px">${status}</div>
@@ -1601,7 +1613,7 @@ async function planLaden() {
     PLAN = p; PLAN_FEHLER = false;
     try { localStorage.setItem(PLAN_KEY, JSON.stringify(p)); } catch (e) {}
   } catch (e) { PLAN_FEHLER = true; }
-  if (U.plan) render();
+  if (U.plan || U.termine) render();
 }
 const WT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 function vPlan() {
@@ -1896,19 +1908,22 @@ const A = {
   },
   plan: () => { U.plan = true; planLaden(); },
   planZu: () => { U.plan = false; },
-  termine: () => { U.termine = true; terminOk = ''; },
+  termine: () => { U.termine = true; terminOk = ''; planLaden(); },
+  terminOhne: () => { U.terFrage = true; return A.terminNeu(); },
   terminZu: () => { U.termine = false; },
-  terTag: v => { behalte(); const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
-  terLaenge: v => { behalte(); U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
-  terSlot: v => { behalte(); U.terStart = +v; return 'ter'; },
+  terTag: v => { behalte(); U.terFrage = false; const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
+  terLaenge: v => { behalte(); U.terFrage = false; U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
+  terSlot: v => { behalte(); U.terFrage = false; U.terStart = +v; return 'ter'; },
   terminNeu: () => {
-    const datum = U.terDatum || heute(), dauer = U.terDauer || 60, gast = $v('t-gast').trim(), tel = $v('t-tel').trim();
+    const datum = U.terDatum || heute(), dauer = U.terDauer || 60, gast = $v('t-gast').trim();
     if (U.terStart === null || U.terStart === undefined) { alert('Bitte im Kalender eine Zeit antippen.'); return false; }
+    // Ohne Eintrag im Feld wird einmal nachgefragt; „Ohne Angabe reservieren“ überspringt das.
+    if (!gast && !U.terFrage) { behalte(); U.terFrage = true; return; }
     // Zwischenzeitlich kann ein anderes Gerät dieselbe Zeit vergeben haben (Google-Abgleich): dann nicht doppelt buchen.
     if (!terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; behalte(); return; }
     const zeit = minZeit(U.terStart);
-    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast, tel });
-    U.terStart = null; U.keep = { 't-gast': '', 't-tel': '' };
+    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast });
+    U.terStart = null; U.terFrage = false; U.keep = { 't-gast': '' };
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   terminJetzt: () => { terminPush(true); },
@@ -2112,7 +2127,7 @@ setInterval(() => { if (geschuetzt() && pinGesetzt() && !entsperrt() && !$('pin-
 document.addEventListener('input', e => { if (/^p-[sm]-(betrag|tip)$/.test(e.target.id || '')) kartenAnzeigen(); });
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.id === 't-datum' && el.value) { behalte(); U.terDatum = el.value; U.terStart = null; render(); return; }
+  if (el.id === 't-datum' && el.value) { behalte(); U.terFrage = false; U.terDatum = el.value; U.terStart = null; render(); return; }
   if (el.id === 'imp' && el.files[0]) {
     el.files[0].text().then(t => {
       try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; n.pin = S.pin; S = migriere(n); speichern(); render(); }
