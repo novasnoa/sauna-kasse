@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Checkliste: neues iPad und SumUp Solo einrichten</title>
+<style>
+@page{size:A4;margin:12mm 14mm 12mm 14mm}
+*{box-sizing:border-box}
+body{font:11pt/1.32 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#222;margin:0}
+h1{font-size:19pt;margin:0 0 2px}
+.sub{color:#555;margin:0 0 8px}
+h2{font-size:12.5pt;margin:9px 0 3px;padding:3px 8px;background:#8a4b1f;color:#fff;border-radius:4px;break-after:avoid}
+.regel{border:2px solid #b3361f;border-radius:6px;padding:6px 10px;margin:6px 0;background:#fdf1ee}
+ul{list-style:none;padding:0;margin:0}
+li{display:flex;gap:9px;align-items:flex-start;padding:2.5px 0;border-bottom:1px solid #e7e0d6;break-inside:avoid}
+li:before{content:"";flex:0 0 15px;height:15px;margin-top:3px;border:2px solid #222;border-radius:3px}
+li .n{flex:0 0 100%}
+li div{flex:1}
+.hint{display:block;color:#555;font-size:10.5pt}
+.fill{display:inline-block;min-width:60mm;border-bottom:1.5px solid #222;height:1.1em;vertical-align:bottom}
+table{border-collapse:collapse;width:100%;font-size:10.5pt;break-inside:avoid}
+td,th{border:1px solid #bbb;padding:2px 6px;text-align:left;vertical-align:top}
+th{background:#f1ece5}
+.seite2{}
+.klein{font-size:9.5pt;color:#555;margin-top:4px}
+b{font-weight:700}
+</style></head><body>
+
+<h1>Checkliste: neues iPad und SumUp Solo einrichten</h1>
+<p class="sub">Kasse „Olivin“ · <b>sauna-kassensystem.web.app</b> · Datum: <span class="fill" style="min-width:35mm"></span> &nbsp; Erledigt von: <span class="fill" style="min-width:45mm"></span></p>
+
+<div class="regel"><b>Grundregel:</b> Händlernummer, API-Schlüssel, Affiliate-Schlüssel und das Solo gehören alle zum <b>Sauna-Konto</b> – nichts aus dem eigenen Test-Konto.
+Schlüssel <b>nie</b> auf diesem Blatt notieren und niemandem schicken.</div>
+
+<h2>A · Vorbereitung am Rechner (Sauna-Konto)</h2>
+<ul>
+<li><div>Anmelden bei <b>me.sumup.com</b> mit dem <b>Sauna-Konto</b> (oben rechts prüfen, dass es das Sauna-Konto ist)</div></li>
+<li><div><b>API-Schlüssel</b> anlegen: Profil → Einstellungen → Für Entwickler → Toolkit → <b>API Keys</b> → Create, Name „Kasse“. <b>Sofort kopieren und sicher speichern</b> (wird nicht noch einmal gezeigt). Den „Public Key“ <b>nicht</b> nehmen.<span class="hint">Gespeichert in: <span class="fill" style="min-width:55mm"></span> (z. B. Passwort-Manager)</span></div></li>
+<li><div><b>Affiliate-Schlüssel</b> anlegen: Toolkit → <b>Affiliate Keys</b> → bei „Application identifier“ eine Kennung eintragen → Add. Diese Kennung ist später die <b>App-ID</b>.<span class="hint">App-ID (genau so merken): <span class="fill"></span> &nbsp; Schlüssel gespeichert in: <span class="fill" style="min-width:45mm"></span></span></div></li>
+<li><div><b>Händlernummer</b> (Merchant Code) notieren – bei den Konto-/Unternehmensdaten.<span class="hint">Händlernummer: <span class="fill"></span></span></div></li>
+<li><div>Das <b>Solo gehört zum Sauna-Konto</b> (dort registriert/aktiviert)</div></li>
+</ul>
+
+<h2>B · Das Solo vorbereiten</h2>
+<ul>
+<li><div>Solo laden und <b>am Strom</b> lassen; WLAN-Name und -Passwort bereit (sonst eigene SIM; ist beides da, nimmt es das WLAN)</div></li>
+<li><div>Falls noch mit dem <b>eigenen</b> Konto angemeldet: oberes Menü → Einstellungen → Info → <b>Abmelden</b></div></li>
+<li><div>Oberes Menü → <b>Verbindungen</b> → WLAN verbinden → <b>API</b> → <b>Verbinden</b>. Es zeigt einen <b>Kopplungscode</b> (gilt nur <b>5 Minuten</b>) – erst anzeigen lassen, wenn die Kasse bereit ist (Schritt D)</div></li>
+</ul>
+
+<h2>C · Kasse auf dem neuen iPad</h2>
+<ul>
+<li><div>In <b>Safari</b> öffnen: <b>https://sauna-kassensystem.web.app</b></div></li>
+<li><div>Teilen-Symbol → <b>Zum Home-Bildschirm</b> → Hinzufügen</div></li>
+<li><div><b>Ab jetzt nur über das neue Symbol öffnen</b> (die Home-Bildschirm-App hat einen eigenen Speicher)</div></li>
+<li><div>Menü ☰ → Stammdaten → „Sicherung &amp; Google“ → <b>Abgleich einschalten und bei Google anmelden</b>; mit dem <b>Team-Google-Konto</b> anmelden, Rechte bestätigen<span class="hint">„App nicht verifiziert“ → Erweitert → Weiter. Öffnet sich kein Anmeldefenster: für heute im Safari-Tab statt über das Symbol arbeiten.</span></div></li>
+<li><div>Warten, bis oben <b>☁ ✓</b> mit Uhrzeit steht</div></li>
+<li><div>Prüfen: Kacheln, Mitarbeiter, Masseur*innen und heutige Schicht sind da · „Massageplan“ öffnet den Plan · „Termine“ öffnet den Kalender</div></li>
+</ul>
+
+<h2 class="seite2">D · SumUp in der Kasse (Menü ☰ → Stammdaten → „💳 Kartengerät“)</h2>
+<ul>
+<li><div>War auf einem Gerät schon ein <b>Test-Zugang</b> gespeichert: dort <b>„Zugang löschen“</b></div></li>
+<li><div><b>Händlernummer</b> und <b>API-Schlüssel</b> eintragen → <b>„Zugriff testen“</b> → Erwartung: „Zugriff funktioniert“</div></li>
+<li><div>Am Solo jetzt „API → Verbinden“ drücken und den <b>Kopplungscode</b> ablesen (5 Minuten Zeit)</div></li>
+<li><div>In der Kasse unter „Solo koppeln“: <b>Kopplungscode</b> + Name (z. B. „Tresen“) → <b>Gerät koppeln</b> → am Solo die Bestätigung abwarten</div></li>
+<li><div>Nochmal „Zugriff testen“ → beim Solo <b>„Dieses Gerät verwenden“</b></div></li>
+<li><div>„Dauerhaft einrichten“: <b>Affiliate-Schlüssel</b> und <b>App-ID</b> (genau wie bei A) eintragen · Schalter wie voreingestellt lassen · Trinkgeld-% bei Bedarf (z. B. 5,10,15)</div></li>
+<li><div><b>Eigenen Code</b> (mind. 8 Zeichen) zweimal eintragen → <b>Verschlüsselt speichern</b><span class="hint">Der Code wird bei <b>jedem Start der Kasse</b> gebraucht. Geht er verloren: „Zugang löschen“ und neu einrichten. Code sicher aufbewahren – nicht auf diesem Blatt.</span></div></li>
+</ul>
+
+<h2>E · Echter Test (1 €)</h2>
+<ul>
+<li><div>Test-Gast anlegen, kleine Leistung buchen, Zahlart <b>Karte → „An Solo senden“</b>; am Solo mit echter Karte zahlen, Trinkgeld wählen<span class="hint">Knopf: blau bereit → gelb gesendet → <b>grün bezahlt</b> (Kasse bucht Betrag und Trinkgeld)</span></div></li>
+<li><div><b>Im SumUp-Konto der Sauna nachsehen:</b> Die Zahlung steht dort – <b>nicht</b> im eigenen Konto</div></li>
+<li><div>Bietet das Solo kein Trinkgeld an: Schalter „Trinkgeld-Voreinstellung des Solo nutzen“ <b>ausschalten</b> und noch einmal testen</div></li>
+<li><div>Testzahlung bei SumUp <b>erstatten</b>, Test-Gast schließen</div></li>
+</ul>
+
+<h2>F · Abschluss</h2>
+<ul>
+<li><div>Am alten Gerät <b>Sicherung</b> heruntergeladen (Stammdaten → Sicherung) und dort <b>nichts gelöscht</b></div></li>
+<li><div>Kasse einmal <b>komplett schließen und neu öffnen</b> → Code wird verlangt → entsperrt → „An Solo senden“ ist wieder da</div></li>
+<li><div>Zugangsdaten sind gesichert (Passwort-Manager) – <b>nicht</b> auf Papier, Zettel oder Chat</div></li>
+</ul>
+
+<h2 style="break-before:auto">Wenn etwas hakt</h2>
+<table>
+<tr><th style="width:36%">Meldung / Verhalten</th><th>Wahrscheinliche Ursache</th></tr>
+<tr><td>401 · „Schlüssel nicht angenommen“</td><td>API-Schlüssel falsch/abgeschnitten, oder aus dem anderen Konto</td></tr>
+<tr><td>403</td><td>Dem Schlüssel fehlt eine Berechtigung</td></tr>
+<tr><td>404</td><td>Händlernummer stimmt nicht</td></tr>
+<tr><td>Kopplung schlägt fehl</td><td>Code nach 5 Minuten abgelaufen → am Solo neu „Verbinden“, neuen Code eintragen</td></tr>
+<tr><td>Solo zahlt nicht / reagiert nicht</td><td>Solo offline? Der Betrag wird nur 60 Sekunden erwartet. Zur Not am Solo selbst eintippen und in der Kasse „Nur am Solo kassieren“ ausschalten</td></tr>
+<tr><td>Plan leer</td><td>Wird alle 30 Minuten aktualisiert; Kasse einmal mit Netz öffnen</td></tr>
+</table>
+<p class="klein">Bei jeder unklaren Meldung: Foto machen oder den genauen Text aufschreiben und weiterschicken. Gegen ein echtes Solo ist die Anbindung noch nicht erprobt – der heutige Test ist der erste echte Lauf.</p>
+</body></html>
