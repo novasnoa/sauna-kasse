@@ -214,12 +214,13 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .pn.frei{--c:#b3361f;background:#fde8e4;color:#b3361f;border-color:#b3361f}
 @media(max-width:700px){.pg{grid-template-columns:repeat(2,1fr)}}
 .tk-kal{border:1px solid var(--line);border-radius:var(--rk);overflow:hidden}
-.tk-zeile{display:grid;grid-template-columns:repeat(4,1fr)}
-.tk{border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0;background:#faf6f1;min-height:44px;padding:2px 4px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;font-size:13px;color:#222;min-width:0}
+.tk-zeile{display:grid;grid-template-columns:34px repeat(12,1fr)}
+.tk-h{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;background:#f1ece5;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.tk{border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0;background:#faf6f1;min-height:42px;padding:0 2px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#222;min-width:0;position:relative;overflow:visible}
 .tk.abend,.tk-leg.abend{background:#ece6f3}
 .tk-leg{display:inline-block;width:12px;height:12px;border-radius:3px;background:#faf6f1;border:1px solid var(--line);vertical-align:-1px}
-.tk em{font-style:normal;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tk.belegt{background:#cfcac3;color:#555}.tk.weg{background:#eeebe6;color:#aaa}
+.tk em{font-style:normal;font-size:11px;position:absolute;left:3px;top:50%;transform:translateY(-50%);white-space:nowrap;z-index:1}
+.tk.belegt{background:#cfcac3;color:#444}.tk.weg{background:#eeebe6;color:#bbb}
 .tk.sel{background:var(--acc);color:#fff}
 .tz{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:#222;color:#fff;font-size:12px;font-weight:700}
 .noprint{}
@@ -310,7 +311,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname', 't-was', 't-gast'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname', 't-gast', 't-tel'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -1500,10 +1501,10 @@ const TERMIN_SCHLUESSEL = 'y81j-UvH1sSce7r3rHgqn7d7_dmJ1FgS', TERMIN_SENT = 'sk-
 // (so zählt auch der Schichtplan). Deshalb gibt es bei der Reservierung keine Schichtwahl.
 const terminNr = zeit => { const [h, m] = String(zeit).split(':').map(Number), min = h * 60 + m; return min >= 720 && min <= 1110 ? 1 : 2; };
 const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
-// Kalender der Reservierung: Raster von 15 Minuten, 12:00 bis 24:00. Es gibt nie zwei Massagen zur selben Zeit – unabhängig davon,
+// Kalender der Reservierung: Raster von 5 Minuten, 12:00 bis 24:00; fünf Längen zur Wahl. Es gibt nie zwei Massagen zur selben Zeit – unabhängig davon,
 // wer massiert (das legt der Schichtplan fest): ein Termin belegt [Beginn, Beginn + Dauer), direkt aneinander anschließen geht.
 // Ältere Termine ohne Dauer zählen als 60 Minuten.
-const TK_VON = 720, TK_BIS = 1440, TK_RASTER = 15, TK_LAENGEN = [30, 45, 60, 75, 90, 120];
+const TK_VON = 720, TK_BIS = 1440, TK_RASTER = 5, TK_LAENGEN = [30, 45, 60, 90, 120];
 const zeitMin = z => { const [h, m] = String(z).split(':').map(Number); return h * 60 + m; };
 const minZeit = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const terDauer = x => x.dauer || 60;
@@ -1536,38 +1537,37 @@ async function terminPush(erzwingen) {
 addEventListener('online', () => terminPush());
 setInterval(() => terminPush(), 5 * 60000);
 function vTermine() {
-  const massagen = sortiert('lei', l => !!l.massage).map(l => l.name);
   const liste = terminAnzeige();
   const datum = U.terDatum || (U.terDatum = heute()), dauer = U.terDauer || 60, sel = U.terStart;
   const wt = d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(d + 'T12:00:00').getDay()];
   const belegt = terBelegt(datum);
-  // Kalenderzellen: je Viertelstunde eine Taste. Belegte sind ausgegraut (der erste Zeitpunkt trägt den Namen), ebenso Zeiten,
-  // an denen die gewählte Länge nicht mehr passt.
+  // Kalenderzellen: je 5 Minuten eine Taste, je Stunde eine Zeile. Belegte sind ausgegraut (nur der Beginn trägt Zeit und Namen),
+  // ebenso Zeiten, an denen die gewählte Länge nicht mehr passt.
   let kal = '';
   for (let h = TK_VON / 60; h < TK_BIS / 60; h++) {
-    let zellen = '';
+    let zellen = `<span class="tk-h">${h}</span>`;
     for (let q = 0; q < 60; q += TK_RASTER) {
       const m = h * 60 + q, b = belegt.find(t => m >= t.a && m < t.b);
       const ok = !b && terMoeglich(datum, m, dauer), im = sel !== null && m >= sel && m < sel + dauer;
-      const kopf = b && m === Math.floor(b.a / TK_RASTER) * TK_RASTER ? esc(b.x.was) : '';
-      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt' : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – belegt: ' + esc(b.x.was) : ''}"><span>${minZeit(m)}</span>${kopf ? `<em>${kopf}</em>` : ''}</button>`;
+      const kopf = b && m === Math.floor(b.a / TK_RASTER) * TK_RASTER ? `<em>${esc(b.x.zeit)} ${esc(b.x.gast || b.x.was)}</em>` : '';
+      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt' : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – belegt' : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
     }
     kal += `<div class="tk-zeile">${zellen}</div>`;
   }
-  const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}</b> ${esc(x.was)}${x.gast ? ' · ' + esc(x.gast) : ''}</span><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></div>`;
-  const tage = [...new Set(liste.map(x => x.datum))];
+  const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}</b> ${schName(terminNr(x.zeit))} · ${terDauer(x)} Min.${x.gast ? ' · ' + esc(x.gast) : ''}${x.tel ? ' · ' + esc(x.tel) : ''}</span><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></div>`;
+  const tagListe = liste.filter(x => x.datum === datum);
   const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Wird an den Schichtplan gesendet.</span>';
-  return `<div id="termine-modal" class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(640px,100%)">
+  return `<div id="termine-modal" class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(860px,100%)">
     <div class="row"><b>Massagetermin reservieren</b></div>
     <div class="row"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}" style="flex:1"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
-    <div class="row"><input id="t-was" list="t-massagen" placeholder="Massage" style="flex:1;min-width:160px"><datalist id="t-massagen">${massagen.map(m => `<option value="${esc(m)}">`).join('')}</datalist><input id="t-gast" placeholder="Name / Hinweis (optional)" style="flex:1;min-width:160px"></div>
+    <div class="row"><input id="t-gast" placeholder="Name / Hinweis" style="flex:2;min-width:180px"><input id="t-tel" type="tel" placeholder="Telefon" style="flex:1;min-width:140px"></div>
     <div class="mut">Länge</div>
     <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
-    <div class="row mut" style="gap:14px"><span><span class="tk-leg"></span> Tagesschicht 12:00–18:30</span><span><span class="tk-leg abend"></span> Abendschicht 18:30–24:00</span></div>
+    <div class="row mut" style="gap:14px"><span><span class="tk-leg"></span> Tagesschicht 12:00–18:30</span><span><span class="tk-leg abend"></span> Abendschicht 18:30–24:00</span><span>(wird nach der Uhrzeit erkannt)</span></div>
     <div class="tk-kal">${kal}</div>
-    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.)` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><button class="p" data-act="terminNeu" style="margin-left:auto">Reservieren</button></div>
-    <h3>Kommende Termine (${liste.length})</h3>
-    ${tage.map(d => `<div class="mut" style="margin-top:6px">${wt(d)} ${datumDe(d)}</div>` + liste.filter(x => x.datum === d).map(zeile).join('')).join('') || '<div class="mut">Noch keine Termine.</div>'}
+    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><button class="p" data-act="terminNeu" style="margin-left:auto">Reservieren</button></div>
+    <h3>Termine am ${wt(datum)} ${datumDe(datum)} (${tagListe.length})</h3>
+    ${tagListe.map(zeile).join('') || '<div class="mut">Noch keine Termine.</div>'}
     <div class="mut" style="margin-top:10px">${status}</div>
     <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button><button data-act="terminJetzt">Jetzt senden</button></div></div></div>`;
 }
@@ -1886,14 +1886,13 @@ const A = {
   terLaenge: v => { behalte(); U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
   terSlot: v => { behalte(); U.terStart = +v; return 'ter'; },
   terminNeu: () => {
-    const datum = U.terDatum || heute(), dauer = U.terDauer || 60, was = $v('t-was').trim(), gast = $v('t-gast').trim();
+    const datum = U.terDatum || heute(), dauer = U.terDauer || 60, gast = $v('t-gast').trim(), tel = $v('t-tel').trim();
     if (U.terStart === null || U.terStart === undefined) { alert('Bitte im Kalender eine Zeit antippen.'); return false; }
-    if (!was) { alert('Bitte die Massage angeben.'); return false; }
     // Zwischenzeitlich kann ein anderes Gerät dieselbe Zeit vergeben haben (Google-Abgleich): dann nicht doppelt buchen.
     if (!terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; behalte(); return; }
     const zeit = minZeit(U.terStart);
-    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was, gast });
-    U.terStart = null; U.keep = { 't-was': '', 't-gast': '' };
+    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast, tel });
+    U.terStart = null; U.keep = { 't-gast': '', 't-tel': '' };
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   terminJetzt: () => { terminPush(true); },
