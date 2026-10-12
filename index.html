@@ -1482,18 +1482,22 @@ const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', 
 // Massagetermine: Die Kasse reserviert Termine je Tag und Schicht – bewusst OHNE Masseur*in; wer massiert, steht im Schichtplan.
 // Die Termine liegen in S.ter (und gleichen sich damit über Google zwischen den Geräten ab). Zum Schichtplan geht jeweils die
 // ganze Liste der kommenden Termine; er ersetzt seinen Stand. Warum nicht einzeln melden: ein verlorener Storno-Ruf ließe sonst
-// einen Geistertermin zurück, und ein doppelt gesendeter Stand schadet nicht. Der Schlüssel liegt nur auf diesem Gerät (nicht in S,
-// damit er nicht ins Google-Konto wandert) und wird einmal unter „Termine“ eingetragen.
-const TERMIN_KEY = 'sk-plankey', TERMIN_SENT = 'sk-terminsent';
+// einen Geistertermin zurück, und ein doppelt gesendeter Stand schadet nicht. Der Schlüssel ist fest verankert, damit kein Gerät
+// ihn eintippen muss (Vorgabe des Betreibers). Er steht damit im Quelltext der Kasse und hält nur Zufallszugriffe vom Schichtplan fern;
+// derselbe Wert liegt dort als Cloudflare-Secret KASSE_SCHLUESSEL. Wechsel: beide Stellen ändern.
+const TERMIN_SCHLUESSEL = 'y81j-UvH1sSce7r3rHgqn7d7_dmJ1FgS', TERMIN_SENT = 'sk-terminsent';
 const schichtArt = nr => nr === 1 ? 'frueh' : 'spaet';
 const terminAnzeige = () => (S.ter || []).filter(x => x.datum >= heute()).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit));
 let terminLauf = false, terminFehler = '', terminOk = '';
 async function terminPush(erzwingen) {
-  const key = lsGet(TERMIN_KEY);
-  if (!key || terminLauf || !navigator.onLine) return;
+  const key = TERMIN_SCHLUESSEL;
+  if (terminLauf || !navigator.onLine) return;
   const von = heute();
   const termine = terminAnzeige().map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was, gast: x.gast }));
   const stand = JSON.stringify({ von, termine });
+  // Ein Gerät, das noch nie etwas gesendet hat und nichts hat (frisch eingerichtet, Google-Abgleich noch nicht durch), darf den Stand im
+  // Schichtplan nicht mit einer leeren Liste leeren.
+  if (!termine.length && !lsGet(TERMIN_SENT)) return;
   if (!erzwingen && lsGet(TERMIN_SENT) === stand) return;
   terminLauf = true;
   try {
@@ -1508,11 +1512,11 @@ addEventListener('online', () => terminPush());
 setInterval(() => terminPush(), 5 * 60000);
 function vTermine() {
   const massagen = sortiert('lei', l => !!l.massage).map(l => l.name);
-  const liste = terminAnzeige(), key = lsGet(TERMIN_KEY);
+  const liste = terminAnzeige();
   const tage = [...new Set(liste.map(x => x.datum))];
   const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}</b> ${esc(x.was)}${x.gast ? ' · ' + esc(x.gast) : ''}</span><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></div>`;
   const wt = d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(d + 'T12:00:00').getDay()];
-  const status = !key ? '<span class="warn">Schlüssel fehlt – die Termine gehen noch nicht an den Schichtplan.</span>' : terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Schlüssel gesetzt.</span>';
+  const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Wird an den Schichtplan gesendet.</span>';
   return `<div class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(640px,100%)">
     <div class="row"><b>Massagetermine reservieren</b></div>
     <div class="mut">Gilt für Tag und Schicht – wer massiert, legt der Schichtplan fest.</div>
@@ -1522,7 +1526,7 @@ function vTermine() {
     <h3>Kommende Termine (${liste.length})</h3>
     ${tage.map(d => `<div class="mut" style="margin-top:6px">${wt(d)} ${datumDe(d)}</div>` + [1, 2].map(nr => { const l = liste.filter(x => x.datum === d && x.nr === nr); return l.length ? `<div><small class="mut">${schName(nr)}</small>${l.map(zeile).join('')}</div>` : ''; }).join('')).join('') || '<div class="mut">Noch keine Termine.</div>'}
     <div class="mut" style="margin-top:10px">${status}</div>
-    <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button><button data-act="terminSchluessel">${key ? 'Schlüssel ändern' : 'Schlüssel eintragen'}</button>${key ? '<button data-act="terminJetzt">Jetzt senden</button>' : ''}</div></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button><button data-act="terminJetzt">Jetzt senden</button></div></div></div>`;
 }
 // Massageplan: plan.json von der eigenen Adresse. Der letzte gute Stand liegt zusätzlich im Gerät, damit der Plan auch ohne Netz
 // erscheint (dann mit dem Stand, den er hat). Bewusst nicht in S: der Plan gehört nicht zur Kasse und wird nicht zwischen Geräten gesichert.
@@ -1839,11 +1843,6 @@ const A = {
     S.ter.push({ id: id(), datum, nr, zeit, was, gast });
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
-  terminSchluessel: () => {
-    const k = prompt('Schlüssel für den Schichtplan (einmalig; liegt nur auf diesem Gerät):', '');
-    if (k === null) return false;
-    lsSet(TERMIN_KEY, k.trim()); lsSet(TERMIN_SENT, ''); terminFehler = ''; terminPush(true);
-  },
   terminJetzt: () => { terminPush(true); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
   masPlan: () => { $('mas-imp').value = (PLAN.personen || []).join('\n'); A.masImport(); },

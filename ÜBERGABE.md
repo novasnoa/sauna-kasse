@@ -56,6 +56,6 @@ Die Daten gelten als praktisch öffentlich (Vorgabe des Betreibers); das Passwor
 Knopf „Termine“ oben: reserviert Termine je Tag und Schicht (Tagesschicht/Abendschicht), **ohne Masseur*in** – wer massiert, legt der
 Schichtplan fest; dort sehen die Eingetragenen der Schicht die Termine. Die Termine liegen in `S.ter` und gleichen sich über Google
 zwischen den Geräten ab. Zum Schichtplan geht jeweils die ganze Liste der kommenden Termine (`PUT /api/kasse/termine`, der Plan
-ersetzt seinen Stand); offline wird später nachgeholt. Der Schlüssel (`KASSE_SCHLUESSEL` im Schichtplan) wird einmal je Gerät unter
-„Termine → Schlüssel eintragen“ gesetzt und liegt nur dort (nicht im Google-Konto). Der Plan muss dafür ausgeliefert sein, siehe
-`ANLEITUNG.md` im Schichtplan-Repo.
+ersetzt seinen Stand); offline wird später nachgeholt. Der Schlüssel ist fest im Kassen-Code (`TERMIN_SCHLUESSEL`), damit kein Gerät ihn eintippen muss; derselbe Wert liegt im Schichtplan als Secret
+`KASSE_SCHLUESSEL`. Er erlaubt nur, Massagetermine in den Schichtplan zu schreiben, nichts aus der Kasse zu lesen. Wechsel: beide Stellen ändern.
+Der Plan muss dafür ausgeliefert sein, siehe `ANLEITUNG.md` im Schichtplan-Repo.
