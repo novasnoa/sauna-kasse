@@ -266,7 +266,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { terFrage: false, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -320,7 +320,7 @@ const name = (k, i) => (S[k].find(x => x.id === i) || { name: '(gelöscht)' }).n
 const $v = i => ($(i) || {}).value || '';
 
 // Reine Bedienungs-Umschalter (Zahlart, Empfänger …) zeichnen neu; angefangene Eingaben bleiben dabei stehen.
-const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname', 't-gast'].forEach(i => { U.keep[i] = $v(i); }); };
+const behalte = () => { U.keep = {}; ['p-s-betrag', 'p-s-tip', 'x-betrag', 'g-nr', 'g-name', 's-srv-name', 's-srv-preis', 's-mss-name', 's-mss-preis', 's-war-name', 's-war-preis', 'e-name', 'e-preis', 'e-fl', 'su-code', 'su-key', 'su-aff', 'su-app', 'su-tips', 'su-pair', 'su-gname'].forEach(i => { U.keep[i] = $v(i); }); };
 // Intern bleiben die Schichten 1 und 2 (alte Daten), angezeigt werden sie mit Namen.
 const schName = nr => ({ 1: 'Tagesschicht', 2: 'Abendschicht' })[nr] || 'Schicht ' + nr;
 const offeneSchichten = () => S.sch.filter(s => !s.zu);
@@ -724,7 +724,7 @@ function render() {
   const terSc = U.termine && $('termine-modal') ? $('termine-modal').scrollTop : 0;
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
   if (U.plan) $('app').insertAdjacentHTML('beforeend', vPlan());
-  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; if (U.terFrage && $('t-gast')) $('t-gast').focus(); }
+  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; if (U.terPop) { $('app').insertAdjacentHTML('beforeend', vTerPop()); if ($('t-gast')) $('t-gast').focus(); } }
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
@@ -1555,6 +1555,26 @@ function eingeteilt(datum, art) {
   if (!l.length) return '<span class="mut">kein Plan</span>';
   return l.flatMap(x => { const c = x.claims.map(k => `<span class="pn" style="--c:${/^#[0-9a-f]{3,8}$/i.test(k.color) ? k.color : '#999'}">${esc(String(k.name).replace(/\s+massage$/i, ''))}</span>`); for (let i = x.claims.length; i < (x.slots || 1); i++) c.push('<span class="pn frei">frei</span>'); return c; }).join('');
 }
+// Legt den Termin an. Zwischenzeitlich kann ein anderes Gerät dieselbe Zeit vergeben haben (Google-Abgleich): dann nicht doppelt buchen.
+function terBuche(gast) {
+  const datum = U.terDatum || heute(), dauer = U.terDauer || 60;
+  U.terPop = null;
+  if (U.terStart === null || !terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; return; }
+  const zeit = minZeit(U.terStart);
+  S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast: String(gast || '').trim() });
+  U.terStart = null;
+}
+function vTerPop() {
+  const wo = U.terStart !== null ? `${datumDe(U.terDatum)} · ${minZeit(U.terStart)}–${minZeit(U.terStart + (U.terDauer || 60))}` : '';
+  return `<div id="ter-pop" class="modal" style="z-index:30;align-items:center" role="dialog" aria-label="Name und Telefon"><div class="card" style="width:min(460px,100%)">
+    ${U.terPop === 'frage'
+      ? `<b>Name und Telefon eintragen?</b><div class="mut">${wo}</div>
+         <div class="row" style="margin-top:10px"><button class="p" data-act="terOk">OK</button><button data-act="terSkip">Überspringen</button><button data-act="terPopZu" style="margin-left:auto">Zurück</button></div>`
+      : `<b>Name / Telefon</b><div class="mut">${wo}</div>
+         <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input id="t-gast" placeholder="Name / Telefon" autocomplete="off" style="flex:1;min-width:0"><button class="p" data-act="terGo">Reservieren</button></div>
+         <div class="row"><button data-act="terPopZu">Abbrechen</button></div>`}
+  </div></div>`;
+}
 function vTermine() {
   const liste = terminAnzeige();
   const datum = U.terDatum || (U.terDatum = heute()), dauer = U.terDauer || 60, sel = U.terStart;
@@ -1587,13 +1607,11 @@ function vTermine() {
   return `<div id="termine-modal" class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(860px,100%)">
     <div class="row"><b>Massagetermin reservieren</b></div>
     <div class="row"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}" style="flex:1"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
-    <div class="row"><input id="t-gast" placeholder="Name / Telefon" style="flex:1;min-width:220px" autocomplete="off"></div>
-    ${U.terFrage ? '<div class="warn">Name oder Telefon des Gastes eintragen – oder ohne Angabe reservieren.</div>' : ''}
     <div class="mut">Länge</div>
     <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
     <div class="tk-schichten">${[['frueh', 'Tagesschicht 12:00–18:30', ''], ['spaet', 'Abendschicht 18:30–24:00', 'abend']].map(([art, tit, kl]) => `<div class="tk-sch"><span><span class="tk-leg ${kl}"></span> ${tit}</span><span class="tk-wer">${eingeteilt(datum, art)}</span></div>`).join('')}</div>
     <div class="tk-kal">${kal}</div>
-    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><span style="margin-left:auto;display:flex;gap:8px">${U.terFrage ? '<button data-act="terminOhne">Ohne Angabe reservieren</button>' : ''}<button class="p" data-act="terminNeu">Reservieren</button></span></div>
+    <div class="row" style="align-items:center"><span>${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> (${dauer} Min.) · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit im Kalender antippen.</span>'}</span><button class="p" data-act="terminNeu" style="margin-left:auto">Reservieren</button></div>
     <h3>Termine am ${wt(datum)} ${datumDe(datum)} (${tagListe.length})</h3>
     ${tagListe.map(zeile).join('') || '<div class="mut">Noch keine Termine.</div>'}
     <div class="mut" style="margin-top:10px">${status}</div>
@@ -1909,22 +1927,22 @@ const A = {
   plan: () => { U.plan = true; planLaden(); },
   planZu: () => { U.plan = false; },
   termine: () => { U.termine = true; terminOk = ''; planLaden(); },
-  terminOhne: () => { U.terFrage = true; return A.terminNeu(); },
-  terminZu: () => { U.termine = false; },
-  terTag: v => { behalte(); U.terFrage = false; const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
-  terLaenge: v => { behalte(); U.terFrage = false; U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
-  terSlot: v => { behalte(); U.terFrage = false; U.terStart = +v; return 'ter'; },
+  terminZu: () => { U.termine = false; U.terPop = null; },
+  terTag: v => { behalte(); const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
+  terLaenge: v => { behalte(); U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
+  terSlot: v => { behalte(); U.terStart = +v; return 'ter'; },
+  // Reservieren: erst prüfen, dann in einem kleinen Fenster nach Name und Telefon fragen (OK → Eingabefeld mit Tastatur und „Reservieren“
+  // daneben; Überspringen → ohne Angabe). Das Fenster steht über dem Kalender, damit dessen Stand erhalten bleibt.
   terminNeu: () => {
-    const datum = U.terDatum || heute(), dauer = U.terDauer || 60, gast = $v('t-gast').trim();
+    const datum = U.terDatum || heute(), dauer = U.terDauer || 60;
     if (U.terStart === null || U.terStart === undefined) { alert('Bitte im Kalender eine Zeit antippen.'); return false; }
-    // Ohne Eintrag im Feld wird einmal nachgefragt; „Ohne Angabe reservieren“ überspringt das.
-    if (!gast && !U.terFrage) { behalte(); U.terFrage = true; return; }
-    // Zwischenzeitlich kann ein anderes Gerät dieselbe Zeit vergeben haben (Google-Abgleich): dann nicht doppelt buchen.
-    if (!terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; behalte(); return; }
-    const zeit = minZeit(U.terStart);
-    S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast });
-    U.terStart = null; U.terFrage = false; U.keep = { 't-gast': '' };
+    if (!terMoeglich(datum, U.terStart, dauer)) { alert('Diese Zeit ist inzwischen belegt. Bitte eine andere wählen.'); U.terStart = null; return; }
+    U.terPop = 'frage';
   },
+  terOk: () => { U.terPop = 'eingabe'; },
+  terSkip: () => { terBuche(''); },
+  terGo: () => { terBuche($v('t-gast')); },
+  terPopZu: () => { U.terPop = null; },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   terminJetzt: () => { terminPush(true); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
@@ -2119,6 +2137,7 @@ document.addEventListener('click', e => {
   speichern(); render();
 });
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 't-gast' && U.terPop === 'eingabe') { e.preventDefault(); A.terGo(); speichern(); render(); return; }
   if (!$('pin-punkte') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
   if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk(); else if (e.key === 'Escape') { A.pinAb(); render(); }
 });
@@ -2127,7 +2146,7 @@ setInterval(() => { if (geschuetzt() && pinGesetzt() && !entsperrt() && !$('pin-
 document.addEventListener('input', e => { if (/^p-[sm]-(betrag|tip)$/.test(e.target.id || '')) kartenAnzeigen(); });
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.id === 't-datum' && el.value) { behalte(); U.terFrage = false; U.terDatum = el.value; U.terStart = null; render(); return; }
+  if (el.id === 't-datum' && el.value) { behalte(); U.terDatum = el.value; U.terStart = null; render(); return; }
   if (el.id === 'imp' && el.files[0]) {
     el.files[0].text().then(t => {
       try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; n.pin = S.pin; S = migriere(n); speichern(); render(); }
