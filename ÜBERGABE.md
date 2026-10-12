@@ -67,3 +67,6 @@ Das wird beim Speichern noch einmal geprüft (ein anderes Gerät kann dieselbe Z
 (Name/Hinweis), `tel`. Die Liste unter dem Kalender zeigt nur den gewählten Tag. Zum Schichtplan gehen Beginn, „Massage (60 Min.)“ und
 Name – die Telefonnummer bleibt bewusst in der Kasse. Ältere Termine ohne Dauer zählen 60 Minuten. Im Massageplan der Kasse steht hinter
 dem Namen / „frei“ die Zahl der Termine der Schicht.
+
+Im Kalender ist jede Massage ein umrandeter Kasten mit dem Massage-Symbol und dem Zeitraum („15:30–16:15“). Name und Telefon gehen gemeinsam im
+Feld `gast` an den Schichtplan („Frau Meier · 0171 …“, höchstens 80 Zeichen, gekürzt wird der Name); dessen Tabelle bleibt unverändert.
