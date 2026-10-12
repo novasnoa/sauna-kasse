@@ -1629,7 +1629,7 @@ function vTermine() {
     <h3>Termine am ${wt(datum)} ${datumDe(datum)} (${tagListe.length})</h3>
     ${tagListe.map(zeile).join('') || '<div class="mut">Noch keine Termine.</div>'}
     <div class="mut" style="margin-top:10px">${status}</div>
-    <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button><button data-act="terminJetzt">Jetzt senden</button></div></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="p" data-act="terminZu">Schließen</button></div></div></div>`;
 }
 // Massageplan: plan.json von der eigenen Adresse. Der letzte gute Stand liegt zusätzlich im Gerät, damit der Plan auch ohne Netz
 // erscheint (dann mit dem Stand, den er hat). Bewusst nicht in S: der Plan gehört nicht zur Kasse und wird nicht zwischen Geräten gesichert.
@@ -1969,7 +1969,6 @@ const A = {
     A.terEditZu();
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
-  terminJetzt: () => { terminPush(true); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
   masPlan: () => { $('mas-imp').value = (PLAN.personen || []).join('\n'); A.masImport(); },
   masUeZu: () => { U.masUe = null; },
