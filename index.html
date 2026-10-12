@@ -268,6 +268,16 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
+// Mehrwertsteuer der Masseur*innen. Der Rechnungsbetrag (70 % vom Massagepreis) ist ein BRUTTOBETRAG: Wer mehrwertsteuerpflichtig ist
+// (Stammdaten → Masseur*innen), stellt denselben Betrag in Rechnung, ausgewiesen als Netto + 19 % MwSt; wer nicht pflichtig ist, rechnet ohne
+// Umsatzsteuer ab. Die Summe bleibt in beiden Fällen gleich, nur die Aufteilung unterscheidet sich.
+const UST_PROZENT = 19;
+const masUst = mid => !!(S.mas.find(x => x.id === mid) || {}).ust;
+const ustNetto = brutto => Math.round(brutto * 100 / (100 + UST_PROZENT));
+// Zeilen für die Rechnung eines Masseurs über den Betrag re
+const rechnungZeilen = (re, ust) => ust
+  ? [`${eur(re)} brutto`, `davon netto ${eur(ustNetto(re))} + ${UST_PROZENT} % MwSt ${eur(re - ustNetto(re))}`]
+  : [`${eur(re)}`, 'ohne Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG)'];
 const U = { terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
@@ -1365,7 +1375,7 @@ function masseurText(sch, mid) {
   const gastText = (s, id) => { const g = s.gaeste.find(x => x.id === id); return g ? kundeText(g) : '?'; };
   return `Abrechnung ${nm} – ${datumDe(sch[0].datum)}\n\nMassagen:\n` +
     (d.bu.map(b => `  ${schName(b.s.nr)}, ${b.zeit}, Schlüssel ${gastText(b.s, b.gast)}: ${b.name} ${eur(b.menge * b.preis)}`).join('\n') || '  keine') +
-    `\nUmsatz Massagen: ${eur(d.um)}\nRechnung an die Sauna (${MASSEUR_PROZENT} % vom Preis, ohne Trinkgeld): ${eur(d.re)}\n\nTrinkgeld:\n` +
+    `\nUmsatz Massagen: ${eur(d.um)}\nRechnung an die Sauna (${MASSEUR_PROZENT} % vom Preis, ohne Trinkgeld): ${rechnungZeilen(d.re, masUst(mid))[0]}\n  ${rechnungZeilen(d.re, masUst(mid))[1]}\n\nTrinkgeld:\n` +
     (d.tr.map(t => `  ${schName(t.s.nr)}, ${t.z.zeit}, Schlüssel ${gastText(t.s, t.z.gast)} (${t.z.art}): ${eur(t.betrag)}`).join('\n') || '  keins') +
     `\nTrinkgeld gesamt: ${eur(d.ti)}\n`;
 }
@@ -1416,9 +1426,9 @@ function masseurAbrechnung(sch, mid) {
   <h3>Trinkgeld</h3>` + (tr.length ? `<table><tr><th>Schicht</th><th>Zeit</th><th>Schlüssel</th><th>Art</th><th class="r">Betrag</th></tr>
   ${tr.map(t => `<tr><td>${schName(t.s.nr)}</td><td>${t.z.zeit}</td><td>${esc(gastText(t.s, t.z.gast))}</td><td>${esc(t.z.art)}</td><td class="r">${eur(t.betrag)}</td></tr>`).join('')}
   <tr><th colspan="4">Trinkgeld gesamt</th><th class="r">${eur(ti)}</th></tr></table>` : '<span class="mut">Kein Trinkgeld.</span>') + `
-  <h3>Summe</h3><table><tr><td>Umsatz Massagen</td><td class="r">${eur(um)}</td></tr><tr><th>Rechnung an die Sauna (${MASSEUR_PROZENT} %)</th><th class="r">${eur(re)}</th></tr><tr><td>Trinkgeld</td><td class="r">${eur(ti)}</td></tr></table>
+  <h3>Summe</h3><table><tr><td>Umsatz Massagen</td><td class="r">${eur(um)}</td></tr><tr><th>Rechnung an die Sauna (${MASSEUR_PROZENT} %)${masUst(mid) ? ' – brutto' : ''}</th><th class="r">${eur(re)}</th></tr>${masUst(mid) ? `<tr><td>davon netto</td><td class="r">${eur(ustNetto(re))}</td></tr><tr><td>davon ${UST_PROZENT} % MwSt</td><td class="r">${eur(re - ustNetto(re))}</td></tr>` : '<tr><td colspan="2" class="mut">ohne Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG)</td></tr>'}<tr><td>Trinkgeld</td><td class="r">${eur(ti)}</td></tr></table>
   <p style="margin-top:28px">Trinkgeld erhalten: ______________________ (Unterschrift)</p>
-  <div class="vermerk"><b>Rechnung an die Sauna:</b> ${MASSEUR_PROZENT} % vom Massagepreis (ohne Trinkgeld) auf ${eur(um)} Umsatz = <b>${eur(re)}</b>.
+  <div class="vermerk"><b>Rechnung an die Sauna:</b> ${MASSEUR_PROZENT} % vom Massagepreis (ohne Trinkgeld) auf ${eur(um)} Umsatz = <b>${eur(re)}</b>${masUst(mid) ? ` brutto (netto ${eur(ustNetto(re))} + ${UST_PROZENT} % MwSt ${eur(re - ustNetto(re))})` : ' (ohne Umsatzsteuer, § 19 UStG)'}.
   Die Sauna hat alle Einnahmen gesammelt eingenommen; die Rechnung wird zu einem späteren Zeitpunkt gestellt.</div></div>`;
 }
 
@@ -1478,9 +1488,11 @@ function abrechnung(sch) {
     masseurJe.map(x => {
       const ns = [...new Set(x.bu.map(b => b.name))];
       return ns.map((n, i) => { const y = x.bu.filter(b => b.name === n); return `<tr><td>${i ? '' : esc(name('mas', x.m))}</td><td>${esc(n)}</td><td class="r">${summe(y, b => b.menge)}</td><td class="r">${eur(summe(y, b => b.menge * b.preis))}</td><td class="r">${eur(summe(y, masseurAnteil))}</td></tr>`; }).join('') +
-        `<tr><td></td><th>Summe ${esc(name('mas', x.m))}</th><th class="r">${x.anz}</th><th class="r">${eur(x.preis)}</th><th class="r">${eur(x.re)}</th></tr>`;
+        `<tr><td></td><th>Summe ${esc(name('mas', x.m))}</th><th class="r">${x.anz}</th><th class="r">${eur(x.preis)}</th><th class="r">${eur(x.re)}</th></tr>` +
+        (masUst(x.m) ? `<tr><td></td><td colspan="3" class="mut">mit MwSt: netto ${eur(ustNetto(x.re))} + ${UST_PROZENT} % ${eur(x.re - ustNetto(x.re))}</td><td></td></tr>` : `<tr><td></td><td colspan="3" class="mut">ohne Umsatzsteuer (§ 19 UStG)</td><td></td></tr>`);
     }).join('') + `<tr><th colspan="3">Massagen gesamt</th><th class="r">${eur(massU)}</th><th class="r">${eur(rechnungU)}</th></tr>
     <tr><th colspan="4">Rechnungen der Masseure an die Sauna (${MASSEUR_PROZENT} %)</th><th class="r">${eur(rechnungU)}</th></tr>
+    ${(() => { const v = masseurJe.filter(x => masUst(x.m)).reduce((a, x) => a + x.re - ustNetto(x.re), 0); return v ? `<tr><td colspan="4" class="mut">darin enthaltene Mehrwertsteuer der Masseur*innen (${UST_PROZENT} %)</td><td class="r">${eur(v)}</td></tr>` : ''; })()}
     <tr><th colspan="4">Bleibt der Sauna (${100 - MASSEUR_PROZENT} %)</th><th class="r">${eur(behaltU)}</th></tr></table>` : '<span class="mut">Keine Massagen.</span>') +
     `<div class="mut" style="margin-top:6px">Die Masseure stellen diese Rechnungen später an die Sauna.</div></div>`;
 
@@ -1726,14 +1738,16 @@ function vStamm() {
   const editZeile = x => `<tr><td colspan="3"><div class="row">${g.f.map(([f, l]) => `<input id="e-${f}" placeholder="${l}" ${FELDTYP[f] || ''} value="${esc(f === 'preis' ? (x.preis / 100).toFixed(2).replace('.', ',') : (x[f] || ''))}">`).join('')}
     ${g.k === 'lei' || g.k === 'war' ? `<button data-act="symOeffnen" data-ziel="edit" title="Symbol wählen">${ikone(symbolFuer({ ...x, icon: U.editIcon }, g.k), 22, fluessigkeit(x))} Symbol ▾</button>` : ''}
     ${g.k === 'war' ? `<select id="e-fl" title="Farbe der Flüssigkeit im Glas"><option value="">Farbe: automatisch</option><option value="none" ${x.fl === 'none' ? 'selected' : ''}>Farbe: keine</option>${Object.entries(FLUESSIG).map(([k, v]) => `<option value="${k}" ${x.fl === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select>` : ''}
+    ${g.id === 'mas' ? `<label class="row" style="gap:6px"><input type="checkbox" id="e-ust" ${x.ust ? 'checked' : ''}> mehrwertsteuerpflichtig (${UST_PROZENT} %)</label>` : ''}
     <button class="ok" data-act="aendSave" data-g="${g.id}" data-v="${x.id}">Speichern</button> <button data-act="aendAb">Abbrechen</button></div></td></tr>`;
   return tabs + `<div class="card"><h2>${g.t}</h2>
   <table>${liste.map((x, n) => U.edit === x.id ? editZeile(x) : `<tr><td>${g.k === 'kun' ? '🔑 ' + esc(x.nummer) + (x.name ? ' · ' + esc(x.name) : '') : (g.k === 'lei' || g.k === 'war' ? `<span class="symklein">${ikone(symbolFuer(x, g.k), 22, fluessigkeit(x))}</span> ` : '') + esc(x.name)}
-      ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}${x.adresse ? `<div class="mut">🏠 ${esc(x.adresse)}</div>` : ''}</td>
+      ${x.email ? `<div class="mut">✉ ${esc(x.email)}</div>` : ''}${x.tel ? `<div class="mut">☎ ${esc(x.tel)}</div>` : ''}${x.adresse ? `<div class="mut">🏠 ${esc(x.adresse)}</div>` : ''}${g.id === 'mas' ? `<div class="mut">${x.ust ? `mehrwertsteuerpflichtig (${UST_PROZENT} %)` : 'nicht mehrwertsteuerpflichtig'}</div>` : ''}</td>
     <td class="r">${x.preis != null ? eur(x.preis) : ''}</td>
     <td class="r">${pf(x, n)}<button data-act="aendern" data-g="${g.id}" data-v="${x.id}">ändern</button> <button class="x" data-act="weg" data-k="${g.k}" data-v="${x.id}">✕</button></td></tr>`).join('') || '<tr><td class="mut">Noch leer.</td></tr>'}</table>
   <div class="row">${g.f.map(([f, l]) => `<input id="s-${g.id}-${f}" placeholder="${l}" ${FELDTYP[f] || ''}>`).join('')}
     ${g.k === 'lei' || g.k === 'war' ? `<button data-act="symOeffnen" data-ziel="neu:${g.id}" title="Symbol wählen">${U.neuIcon[g.id] ? ikone(U.neuIcon[g.id], 22) : 'Symbol'} ▾</button>` : ''}
+    ${g.id === 'mas' ? `<label class="row" style="gap:6px"><input type="checkbox" id="s-mas-ust"> mehrwertsteuerpflichtig (${UST_PROZENT} %)</label>` : ''}
     <button class="p" data-act="neu" data-g="${g.id}">Anlegen</button></div></div>` +
     (g.id === 'mas' ? vMasImport() : '') +
     (U.symZiel ? vSymbole(U.symZiel === 'edit' ? U.editIcon : U.neuIcon[U.symZiel.slice(4)] || '') : '');
@@ -2108,6 +2122,7 @@ const A = {
     if (!(o.name || o.nummer)) return alert('Bitte einen Namen bzw. eine Nummer eingeben.');
     if (g.k === 'kun' && S.kun.some(k => k.nummer === o.nummer && !k.weg)) return alert('Diese Schlüsselnummer gibt es schon.');
     if ((g.k === 'lei' || g.k === 'war') && U.neuIcon[g.id]) o.icon = U.neuIcon[g.id];
+    if (g.id === 'mas' && $('s-mas-ust') && $('s-mas-ust').checked) o.ust = true;
     S[g.k].push(o); U.neuIcon[g.id] = '';
   },
   // Warum nur ausblenden statt löschen: alte Abrechnungen verweisen auf die Person/Position.
@@ -2121,6 +2136,7 @@ const A = {
     for (const [f] of g.f) { const e = $('e-' + f); o[f] = f === 'preis' ? cent(e.value) : e.value.trim(); }
     if (g.k === 'lei' || g.k === 'war') { if (U.editIcon) o.icon = U.editIcon; else delete o.icon; }
     if (g.k === 'war') { const f = $v('e-fl'); if (f) o.fl = f; else delete o.fl; }
+    if (g.id === 'mas') { if ($('e-ust') && $('e-ust').checked) o.ust = true; else delete o.ust; }
     U.edit = null; U.editIcon = '';
   },
   // Symbol-Auswahl in den Stammdaten; angefangene Eingaben bleiben stehen (behalte).

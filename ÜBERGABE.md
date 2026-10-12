@@ -77,3 +77,8 @@ leer bleiben. Über dem Kalender steht je Schicht, wer laut Schichtplan eingetei
 **Bearbeiten:** Ein Antippen eines Kastens im Kalender (oder „Bearbeiten“ in der Liste) öffnet ein Fenster für Name/Telefon, Beginn und Länge (30/40/45/60/90),
 mit „Speichern“, „Abbrechen“ und „Löschen“. Der Termin selbst zählt bei der Prüfung auf Überschneidung nicht mit; bei einer Kollision bleibt das Fenster offen.
 Im Kasten stehen Symbol, Zeitraum und Name/Telefon (gekürzt mit „…“, vollständig im Tooltip).
+
+**Mehrwertsteuer der Masseur*innen:** Stammdaten → Masseur*innen → „mehrwertsteuerpflichtig (19 %)“ (je Person; `ust`). Der Rechnungsbetrag (70 % vom
+Massagepreis) ist ein **Bruttobetrag** und für beide Gruppen gleich hoch: Pflichtige stellen ihn als „netto + 19 % MwSt“ in Rechnung (aufgeteilt in Mail,
+Abrechnung Massage und Sauna-Abrechnung), Nichtpflichtige „ohne Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG)“. In der Sauna-Abrechnung steht zusätzlich
+die darin enthaltene Mehrwertsteuer der Masseur*innen. Standard für alle ohne Haken: nicht pflichtig.
