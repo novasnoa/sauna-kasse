@@ -234,6 +234,7 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .tk-sch>span:first-child{flex:0 0 235px;color:var(--mut);font-size:14px;white-space:nowrap}
 .tk-wer{display:flex;gap:2px;flex-wrap:wrap}
 .tz{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:#222;color:#fff;font-size:12px;font-weight:700}
+.lesechip{display:inline-flex;align-items:center;height:36px;padding:0 12px;border-radius:var(--rk);background:#fff3;color:#fff;font-weight:600;font-size:14px;margin-right:8px;white-space:nowrap}
 .noprint{}
 .printonly{display:none}
 @media print{
@@ -282,7 +283,7 @@ const U = { terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, ter
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
-  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [], ter: [], tot: {} };
+  return { v: 1, ma: [], mas: [], lei: [], war: [], kun: [], sch: [], ter: [], ger: [], tot: {} };
 }
 // Warum: früher war ein „Gast“ nur die Kunden-ID. Jetzt ist jeder Aufenthalt ein eigener Satz,
 // damit dieselbe Schlüsselnummer am Abend mehrfach vergeben werden kann, ohne dass sich
@@ -291,6 +292,7 @@ function laden() {
 function migriere(s) {
   s.sch.forEach(x => { x.gaeste = x.gaeste.map(g => typeof g === 'string' ? { id: g, kun: g, name: '', da: !x.zu, an: '', ab: '' } : g); });
   s.ter = s.ter || [];   // Massagetermine (Reservierungen), siehe vTermine
+  s.ger = s.ger || [];   // Geräte, die an der Kasse hängen (Stammdaten → Geräte)
   s.tot = s.tot || {};   // Löschvermerke für den Abgleich (Id → Zeitpunkt)
   return s;
 }
@@ -717,10 +719,10 @@ function modalSperre() {
   else if (!offen && b.classList.contains('modal-offen')) { b.classList.remove('modal-offen'); b.style.top = ''; window.scrollTo(0, U.scrollY || 0); }
 }
 function render() {
-  if (verlaengerungenPruefen()) speichern();
+  if (darfBuchen() && verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   // Abrechnung und Stammdaten stehen hinter einem gemeinsamen Menüsymbol; im Menü sind sie wieder getrennte Einträge.
-  $('nav').innerHTML = `<button class="planbtn" data-act="termine" title="Massagetermine reservieren">${ikone('clock-plus', 24)}<span>Termine</span></button>
+  $('nav').innerHTML = `${darfBuchen() ? '' : '<span class="lesechip" title="Dieses Gerät bucht nicht (Stammdaten → Geräte)">👁 nur lesen</span>'}<button class="planbtn" data-act="termine" title="Massagetermine reservieren">${ikone('clock-plus', 24)}<span>Termine</span></button>
     <button class="planbtn" data-act="plan" title="Massageplan anzeigen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
     <button class="menubtn ${U.pop === 'menu' || U.tab === 'abr' || U.tab === 'stamm' ? 'on' : ''}" data-act="pop" data-v="menu" title="Menü: Abrechnung, Stammdaten" aria-label="Menü">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>` +
@@ -861,11 +863,33 @@ setInterval(markiere, 30000);
    Zusammengeführt wird je Datensatz (Id): der zuletzt geänderte gewinnt, neue Sätze kommen dazu, Gelöschtes
    steht als Vermerk in S.tot. Die Geräteuhren sollten ungefähr stimmen (automatische Zeit am iPad ist Standard). */
 const GOOGLE_CLIENT_ID = '710064191222-nt56kg78p26guueu0is853evlqg9vl2a.apps.googleusercontent.com';   // Öffentlich, kein Geheimnis; das Client-Secret wird nicht gebraucht.
-const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch', 'ter'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
+const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch', 'ter', 'ger'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', tokMail: false, mailBusy: false, mailFehler: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
+const G = { cid: GOOGLE_CLIENT_ID || lsGet('sk-gcid'), an: lsGet('sk-gsync') === '1', dev: lsGet('sk-dev'), tok: '', tokMail: false, gesehen: {}, mailBusy: false, mailFehler: '', exp: 0, mod: {}, eigen: '', letzte: '', status: '', zeit: '', fehler: '', busy: false, timer: 0, spaeter: false };
 if (!G.dev) { G.dev = id(); lsSet('sk-dev', G.dev); }
+
+/* ---------- Geräte: wer bucht? ----------
+   Gedacht ist EIN schreibendes Gerät (das Tablet in der Sauna); alle anderen (z. B. der PC im Büro) lesen, werten aus und pflegen Stammdaten, Termine.
+   Warum: Mehrere Geräte, die zugleich Schichten, Gäste und Zahlungen anfassen, erzeugen Abgleichsfälle (z. B. buchen automatische Verlängerungen auf
+   jedem offenen Gerät). Ein Gerät ohne Eintrag zählt als buchend – so ändert sich nichts, solange niemand etwas umstellt. Die Rolle liegt je Gerät in S.ger
+   und wandert mit dem Google-Abgleich; festgelegt wird sie in den Stammdaten (Geräte), auch von einem anderen Gerät aus. „Nur lesen“ sperrt, was Schichten,
+   Gäste, Buchungen und Zahlungen verändert; Stammdaten, Termine und Auswertungen bleiben möglich. */
+const geraet = () => S.ger.find(x => x.id === G.dev && !x.weg);
+const darfBuchen = () => { const g = geraet(); return !g || g.bucht !== false; };
+const SCHREIBEND = new Set(['oeffnen', 'wechselOk', 'bearbOk', 'schliessen', 'gastNeu', 'gastFrei', 'geht', 'zurueck', 'buche', 'masBuche', 'buchWeg', 'zahlen', 'zahlWeg', 'extraBuchen', 'suSenden', 'suKnopf', 'buchungenLoeschen']);
+const geraeteName = () => {
+  const ua = navigator.userAgent || '', ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  return (ipad ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android-Gerät' : /Windows/.test(ua) ? 'Windows-PC' : /Mac/.test(ua) ? 'Mac' : 'Gerät') + ' ' + G.dev.slice(-3);
+};
+// Jedes Gerät trägt sich beim Abgleich selbst ein (buchend, wie bisher). Zuletzt gesehen liefert Google über die Änderungszeit der Gerätedatei.
+function geraetEintragen() {
+  const x = S.ger.find(g => g.id === G.dev);
+  if (x && !x.weg) return;
+  if (x) delete x.weg; else S.ger.push({ id: G.dev, name: geraeteName(), bucht: true });   // wieder aufgetaucht: erscheint neu in der Liste
+  stempeln(); lsSet(KEY, JSON.stringify(S));
+}
+const NUR_LESEN_HINWEIS = 'Dieses Gerät ist nur lesend. Gebucht wird am Tablet in der Sauna. (Stammdaten → Geräte)';
 
 // Was an einem Satz „seine eigene“ Änderung ist (ohne die Untersätze einer Schicht und ohne Zeitstempel).
 const fp = o => JSON.stringify(Object.fromEntries(Object.entries(o).filter(([k]) => k !== '_t' && !LISTKEYS.includes(k))));
@@ -993,10 +1017,11 @@ async function gSync(interaktiv) {
   try {
     // Fehlt nur das Mail-Recht (noch nicht freigegeben), soll der Abgleich trotzdem laufen.
     try { await gToken(interaktiv, automailAn()); } catch (e) { if (!automailAn()) throw e; await gToken(interaktiv, false); }
-    stempeln();
+    geraetEintragen(); stempeln();
     const l = await (await gApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=100&fields=files(id,name,modifiedTime)&q=' + encodeURIComponent("name contains 'sauna-kasse-'"))).json();
     const eigenName = 'sauna-kasse-' + G.dev + '.json'; let neu = false;
     for (const f of l.files || []) {
+      const gm = /^sauna-kasse-(.+)\.json$/.exec(f.name || ''); if (gm) G.gesehen[gm[1]] = f.modifiedTime;
       if (f.name === eigenName) { G.eigen = f.id; continue; }
       if (G.mod[f.id] === f.modifiedTime) continue;
       const rem = await (await gApi(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).json();
@@ -1036,6 +1061,7 @@ function mailOhneAdresse(sch) { return mailMasseure(sch).filter(i => !kontakt('m
 const mailFehlerText = e => e.message === 'login' || e.message === 'Mail-Recht fehlt' ? 'Bitte Mailversand bei Google freigeben (Stammdaten → Sicherung & Google).'
   : e.message === 'HTTP 403' ? 'Google lehnt das Senden ab (403): Gmail-API aktiviert und Bereich gmail.send eingetragen?' : e.message;
 async function mailRunde(interaktiv) {
+  if (!interaktiv && !darfBuchen()) return;   // Automatische Mails verschickt nur das buchende Gerät
   if (!automailAn() || !G.an || !G.cid || G.mailBusy || !navigator.onLine) return;
   const auftraege = S.sch.filter(x => x.zu && x.mailFaellig);
   if (!auftraege.length) return;
@@ -1726,12 +1752,27 @@ function vMasImport() {
     <div class="row"><textarea id="mas-imp" rows="6" style="flex:1;min-width:260px;font:inherit;padding:10px;border:1px solid var(--line);border-radius:var(--rk)" placeholder="Eva&#10;Gaby&#10;Hanna-Luise …"></textarea></div>
     <div class="row"><button class="p" data-act="masImport">Masseur*innen übernehmen</button>${PLAN && PLAN.personen ? '<button data-act="masPlan">Alle aus dem Plan übernehmen</button>' : ''}<button data-act="planAuf">Schichtplan öffnen</button></div></div>`;
 }
+function vGeraete() {
+  const liste = S.ger.filter(x => !x.weg).sort((a, b) => (a.id === G.dev ? -1 : b.id === G.dev ? 1 : (a.name || '').localeCompare(b.name || '')));
+  const gesehen = d => { const t = d === G.dev ? Date.now() : Date.parse(G.gesehen[d] || ''); return t ? (d === G.dev ? 'dieses Gerät' : 'zuletzt ' + new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })) : 'noch nicht gesehen'; };
+  const buchend = liste.filter(x => x.bucht !== false).length;
+  return `<div class="card"><h2>🖥 Geräte</h2>
+    <div class="mut">Hier legst du fest, welches Gerät bucht. Am besten bucht nur das Tablet in der Sauna; die anderen (z. B. der PC im Büro) lesen, werten aus und pflegen Stammdaten und Termine.
+    „Nur lesen“ sperrt Schichten, Gäste, Buchungen und Zahlungen. Ein Gerät erscheint hier, sobald es einmal mit Google abgeglichen hat.</div>
+    ${G.an ? '' : '<div class="warn" style="margin-top:6px">Der Abgleich über Google ist auf diesem Gerät aus – andere Geräte erscheinen deshalb nicht.</div>'}
+    <table style="margin-top:8px">${liste.map(x => `<tr><td><b>${esc(x.name || x.id)}</b>${x.id === G.dev ? ' <span class="mut">(dieses Gerät)</span>' : ''}<div class="mut">${gesehen(x.id)}</div></td>
+      <td class="r" style="white-space:nowrap"><button class="${x.bucht !== false ? 'p' : ''}" data-act="gerRolle" data-v="${x.id}">${x.bucht !== false ? '✍ bucht' : '👁 nur lesen'}</button>
+        <button data-act="gerName" data-v="${x.id}">Umbenennen</button>${x.id === G.dev ? '' : ` <button class="x" data-act="gerWeg" data-v="${x.id}" title="Aus der Liste entfernen">✕</button>`}</td></tr>`).join('') || '<tr><td class="mut">Noch kein Gerät eingetragen (erscheint nach dem ersten Abgleich).</td></tr>'}</table>
+    <div class="mut" style="margin-top:8px">${buchend === 1 ? '' : buchend === 0 ? '<span class="warn">Kein Gerät bucht – so kann niemand kassieren.</span>' : `<b>${buchend} Geräte buchen</b> (zum Testen in Ordnung; im Betrieb besser nur eines).`}</div></div>`;
+}
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
-  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' && U.st !== 'sumup' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
-    <button style="margin-left:auto" class="${U.st === 'sumup' ? 'on' : ''}" data-act="stab" data-v="sumup">💳 Kartengerät</button>
+  const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' && U.st !== 'sumup' && U.st !== 'ger' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
+    <button style="margin-left:auto" class="${U.st === 'ger' ? 'on' : ''}" data-act="stab" data-v="ger">🖥 Geräte</button>
+    <button class="${U.st === 'sumup' ? 'on' : ''}" data-act="stab" data-v="sumup">💳 Kartengerät</button>
     <button class="${U.st === 'pin' ? 'on' : ''}" data-act="stab" data-v="pin">🔒 PIN</button>
     <button class="${U.st === 'sich' ? 'on' : ''}" data-act="stab" data-v="sich">💾 Sicherung &amp; Google</button></div>`;
+  if (U.st === 'ger') return tabs + vGeraete();
   if (U.st === 'pin') return tabs + vPinVerwaltung();
   if (U.st === 'sumup') return tabs + vSumup();
   if (U.st === 'sich') return tabs + vSync() + vMail() + `<div class="card"><h2>Sicherung</h2><div class="mut">Ohne Google-Abgleich liegen die Daten nur in diesem Browser. Regelmäßig sichern!</div>
@@ -1956,6 +1997,15 @@ const A = {
   schUeZu: () => { U.schUe = null; },
   schAbr: v => { U.schUe = null; U.abr = v; U.fuer = 'ges'; U.tab = 'abr'; U.gast = null; },
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
+  gerRolle: v => {
+    const x = S.ger.find(g => g.id === v); if (!x) return false;
+    const neu = x.bucht === false;   // true: soll buchen
+    if (!neu && v === G.dev && !confirm('Dieses Gerät auf „nur lesen“ stellen? Danach kann hier nicht mehr gebucht werden (Umstellen geht jederzeit hier wieder).')) return false;
+    if (!neu && S.ger.filter(g => !g.weg && g.bucht !== false).length === 1 && !confirm('Das ist das einzige buchende Gerät. Danach kann niemand mehr kassieren, bis ein Gerät wieder auf „bucht“ steht. Trotzdem?')) return false;
+    x.bucht = neu;
+  },
+  gerName: v => { const x = S.ger.find(g => g.id === v); if (!x) return false; const n = prompt('Name des Geräts:', x.name || ''); if (n === null || !n.trim()) return false; x.name = n.trim(); },
+  gerWeg: v => { const x = S.ger.find(g => g.id === v); if (x && confirm(`„${x.name}“ aus der Liste entfernen? Meldet sich das Gerät wieder, erscheint es neu.`)) x.weg = true; },
   masWahl: v => { U.mas = v; behalte(); },
   masUe: v => { U.masUe = v; },
   masImport: () => {
@@ -2186,6 +2236,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (U.pop && (!e.target.closest('header') || (el && el.dataset.act !== 'pop'))) { U.pop = null; if (!el) render(); }
   if (!el || el.tagName === 'SELECT') return;
+  if (SCHREIBEND.has(el.dataset.act) && !darfBuchen()) { alert(NUR_LESEN_HINWEIS); return; }
   if (A[el.dataset.act](el.dataset.v, el) === false) return;
   speichern(); render();
 });
@@ -2201,6 +2252,7 @@ document.addEventListener('input', e => { if (/^p-[sm]-(betrag|tip)$/.test(e.tar
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 't-datum' && el.value) { behalte(); U.terDatum = el.value; U.terStart = null; render(); return; }
+  if (el.id === 'imp' && el.files[0] && !darfBuchen()) { alert(NUR_LESEN_HINWEIS); el.value = ''; return; }
   if (el.id === 'imp' && el.files[0]) {
     el.files[0].text().then(t => {
       try { const n = JSON.parse(t); if (n.v !== 1) throw 0; if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return; n.pin = S.pin; S = migriere(n); speichern(); render(); }

@@ -85,3 +85,15 @@ mehrwertsteuerpflichtig = 70 % vom Brutto der Massagen + Trinkgeld; mehrwertsteu
 Beispiel 100 € Massage + 10 € Trinkgeld: 70,00 + 10,00 = 80,00 € bzw. 58,82 + 8,40 = 67,22 €. Gerundet wird auf der Summe je Person.
 Stammdaten → Masseur*innen → „mehrwertsteuerpflichtig (19 %)“ (`ust`, Standard nein) bestimmt, welcher Betrag in der Sauna-Abrechnung zählt: Tabelle je Person mit Umsatz,
 Trinkgeld und Rechnung, darunter die enthaltene Mehrwertsteuer der Pflichtigen und „Bleibt der Sauna aus den Massagen“ (Umsatz minus 70-%-Anteil der Massagen, vor Abführung der MwSt).
+
+## Geräte: wer bucht? (Stammdaten → 🖥 Geräte)
+
+Gedacht ist **ein** buchendes Gerät (das Tablet in der Sauna); der PC im Büro liest, wertet aus und pflegt Stammdaten und Termine. Jedes Gerät trägt sich beim ersten
+Google-Abgleich selbst in `S.ger` ein (Name z. B. „iPad abc“, Rolle **bucht**, wie bisher). In den Stammdaten stellt man je Gerät **✍ bucht** oder **👁 nur lesen** ein (auch
+für ein anderes Gerät; die Rolle wandert mit dem Abgleich), kann es umbenennen oder entfernen. Zuletzt gesehen kommt aus der Änderungszeit der Gerätedatei in Google Drive.
+Ein Gerät ohne Eintrag gilt als buchend – nichts ändert sich, solange niemand umstellt. Mehrere buchende Geräte gehen (zum Testen); die Liste weist darauf hin.
+
+„Nur lesen“ sperrt (Hinweis beim Antippen, Menge `SCHREIBEND` im Code): Schicht öffnen/wechseln/bearbeiten/schließen, Gäste aufnehmen/gehen lassen, Buchungen, Zahlungen,
+Trinkgeld, „An Solo senden“, „Alle Buchungen löschen“ und das Einspielen einer Sicherung. Außerdem laufen dort **nicht**: die automatische Verlängerungsbuchung und der
+automatische Mailversand. Erlaubt bleiben: Abrechnung/Auswertungen ansehen, Stammdaten (auch Mitarbeiter*innen), Termine, Massageplan, Sicherung herunterladen.
+Oben zeigt ein Chip „👁 nur lesen“ an, dass das Gerät nicht bucht. Zurückstellen geht jederzeit in den Stammdaten (sie sind auch auf lesenden Geräten erreichbar).
