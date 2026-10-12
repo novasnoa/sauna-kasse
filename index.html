@@ -174,7 +174,7 @@ header button.menubtn{width:52px;height:52px;padding:0;display:inline-flex;align
 #pop.menu{left:auto;right:8px;width:min(300px,calc(100% - 16px));display:flex;flex-direction:column;gap:10px;padding:10px}
 #pop.menu .mi{display:flex;align-items:center;justify-content:flex-start;gap:14px;height:58px;padding:0 18px;font-size:19px;font-weight:600;text-align:left}
 #pop .gegangen{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}   /* etwas Abstand zwischen den drei Schaltern und der Schichtenanzeige */
-#pop{position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
+#pop{overscroll-behavior:contain;position:absolute;top:100%;left:8px;right:8px;background:var(--card);color:var(--ink);border:2px solid var(--acc);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px #0004;max-height:60vh;overflow:auto}
 #pop button{background:#fff;color:var(--ink);border:1px solid var(--line)}
 #pop button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 #pop button.rot{background:var(--warn);color:#fff;border-color:var(--warn)}
@@ -199,7 +199,9 @@ header button.menubtn{width:52px;height:52px;padding:0;display:inline-flex;align
   #gl > :not(#pop).gruppe{padding:0}
   #gl .gruppe > button{width:122px;padding:0}   /* Querformat: alle drei gleich breit; schmal: so breit wie der Text */
 }
-.modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto}
+.modal{position:fixed;inset:0;z-index:20;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+/* Offenes Fenster: die Seite dahinter bleibt stehen (sonst wandert beim Wischen am Rand oder bei kurzem Inhalt die Seite mit). */
+body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .modal .card{width:min(560px,100%);margin:0;border:2px solid var(--acc);box-shadow:0 8px 28px #0005}
 .noprint{}
 .printonly{display:none}
@@ -663,6 +665,13 @@ function vSumup() {
 }
 
 /* ---------- Anzeige ---------- */
+// Solange ein Fenster offen ist, wird die Seite festgesetzt (position:fixed) und ihre Scrollstelle gemerkt; beim Schließen geht es
+// an dieselbe Stelle zurück. Nur overflow:hidden reicht auf dem iPad nicht – dort rutscht die Seite beim Wischen trotzdem mit.
+function modalSperre() {
+  const offen = !!document.querySelector('.modal'), b = document.body;
+  if (offen && !b.classList.contains('modal-offen')) { U.scrollY = window.scrollY; b.style.top = -U.scrollY + 'px'; b.classList.add('modal-offen'); }
+  else if (!offen && b.classList.contains('modal-offen')) { b.classList.remove('modal-offen'); b.style.top = ''; window.scrollTo(0, U.scrollY || 0); }
+}
 function render() {
   if (verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
@@ -682,7 +691,7 @@ function render() {
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
-  markiere(); uhrenAktualisieren(); kartenAnzeigen();
+  markiere(); uhrenAktualisieren(); kartenAnzeigen(); modalSperre();
 }
 
 // Leiste im Kopf (auf jedem Reiter, solange eine Schicht offen ist): „N aktiv“ wählt den Gast (Liste aller Anwesenden
