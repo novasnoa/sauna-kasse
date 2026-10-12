@@ -170,6 +170,7 @@ tr.zoffen td{background:#fdf3f1}
 #gl > :not(#pop).g-aktiv.on{background:#fff;color:#2f7d4f}
 #gl > :not(#pop).g-neu{background:#fff;color:var(--acc);margin-left:6px}
 #gl > :not(#pop).sch{margin-left:16px}
+header button.planbtn{height:52px;padding:0 18px;display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:600}
 header button.menubtn{width:52px;height:52px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 #pop.menu{left:auto;right:8px;width:min(300px,calc(100% - 16px));display:flex;flex-direction:column;gap:10px;padding:10px}
 #pop.menu .mi{display:flex;align-items:center;justify-content:flex-start;gap:14px;height:58px;padding:0 18px;font-size:19px;font-weight:600;text-align:left}
@@ -677,7 +678,8 @@ function render() {
   if (verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   // Abrechnung und Stammdaten stehen hinter einem gemeinsamen Menüsymbol; im Menü sind sie wieder getrennte Einträge.
-  $('nav').innerHTML = `<button class="menubtn ${U.pop === 'menu' || U.tab === 'abr' || U.tab === 'stamm' ? 'on' : ''}" data-act="pop" data-v="menu" title="Menü: Abrechnung, Stammdaten" aria-label="Menü">
+  $('nav').innerHTML = `<button class="planbtn" data-act="plan" title="Massageplan öffnen">${ikone('calendar-event', 24)}<span>Massageplan</span></button>
+    <button class="menubtn ${U.pop === 'menu' || U.tab === 'abr' || U.tab === 'stamm' ? 'on' : ''}" data-act="pop" data-v="menu" title="Menü: Abrechnung, Stammdaten" aria-label="Menü">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>` +
     (U.pop === 'menu' ? `<div id="pop" class="menu">
       <button class="mi ${U.tab === 'abr' ? 'on' : ''}" data-act="tab" data-v="abr">${ikone('receipt', 26)} Abrechnung</button>
@@ -901,6 +903,10 @@ function gLade() {
 }
 // „mail“: zusätzlich das Recht, in Ihrem Namen Mails zu senden (nur Senden, kein Lesen). Es wird nur verlangt, wenn der
 // automatische Mailversand eingeschaltet ist – sonst sieht die Google-Anmeldung davon nichts.
+// Der Schichtplan der Masseure ist eine eigene Seite (Cloudflare). Sein Zugang hängt an einem Cookie mit SameSite=Lax und er erlaubt keine
+// Abfragen von fremden Adressen – deshalb lässt er sich weder einbetten noch aus der Kasse auslesen. Der Knopf öffnet ihn darum als
+// eigenes Fenster; dort bleibt man angemeldet wie sonst auch.
+const SCHICHTPLAN_URL = 'https://sauna-schichtplan.sauna-schichtplan.workers.dev/';
 const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
 function gToken(interaktiv, mail) {
   if (G.tok && Date.now() < G.exp - 60000 && (!mail || G.tokMail)) return Promise.resolve();
@@ -1458,6 +1464,26 @@ const STAMM = [
   { id: 'kun', k: 'kun', t: 'Kunden', f: [['nummer', 'Schlüsselnr.'], ['name', 'Bezeichnung (optional)']] }
 ];
 const FELDTYP = { email: 'type="email" size="22"', tel: 'type="tel" size="14"', adresse: 'size="34"', preis: 'inputmode="decimal" size="8"' };
+// Masseure aus dem Schichtplan übernehmen: Die Namen werden aus dem Plan hier eingefügt (eine Zeile je Person, auch die ganze Liste
+// „EM Eva Massage …“ geht). Die Kasse kann den Plan nicht selbst abfragen (siehe SCHICHTPLAN_URL). Es werden nur neue Namen angelegt,
+// vorhandene bleiben mit ihrer Mailadresse unberührt; Rollen wie „Owner“ und der Eintrag „Geschlossen“ werden übersprungen.
+function planNamen(text) {
+  const roh = String(text || '').split(/[\n\r;,\t]+/).map(x => x.trim()).filter(Boolean);
+  const aus = [];
+  for (let z of roh) {
+    z = z.replace(/^[A-ZÄÖÜ]{1,3}\s+(?=\S)/, '');                 // Initialen-Kürzel vor dem Namen („EM Eva“)
+    if (/owner|inhaber|admin|geschlossen|closed/i.test(z)) continue;
+    z = z.replace(/\s+(massage|masseur\*?in?)$/i, '').trim();
+    if (z && z.length <= 40 && !aus.some(a => a.toLowerCase() === z.toLowerCase())) aus.push(z);
+  }
+  return aus;
+}
+function vMasImport() {
+  return `<div class="card"><h2>Aus dem Schichtplan übernehmen</h2>
+    <div class="mut">Namen aus dem Schichtplan hier einfügen (eine Zeile je Person). „Massage“ hinter dem Namen und Kürzel davor werden entfernt, Owner und „Geschlossen“ übersprungen. Wer schon da ist, bleibt unverändert.</div>
+    <div class="row"><textarea id="mas-imp" rows="6" style="flex:1;min-width:260px;font:inherit;padding:10px;border:1px solid var(--line);border-radius:var(--rk)" placeholder="Eva&#10;Gaby&#10;Hanna-Luise …"></textarea></div>
+    <div class="row"><button class="p" data-act="masImport">Masseur*innen übernehmen</button><button data-act="plan">Schichtplan öffnen</button></div></div>`;
+}
 function vStamm() {
   const g = STAMM.find(x => x.id === U.st) || STAMM[0];
   const tabs = `<div class="row tabs">${STAMM.map(x => `<button class="${x.id === g.id && U.st !== 'sich' && U.st !== 'pin' && U.st !== 'sumup' ? 'on' : ''}" data-act="stab" data-v="${x.id}">${x.t}</button>`).join('')}
@@ -1485,6 +1511,7 @@ function vStamm() {
   <div class="row">${g.f.map(([f, l]) => `<input id="s-${g.id}-${f}" placeholder="${l}" ${FELDTYP[f] || ''}>`).join('')}
     ${g.k === 'lei' || g.k === 'war' ? `<button data-act="symOeffnen" data-ziel="neu:${g.id}" title="Symbol wählen">${U.neuIcon[g.id] ? ikone(U.neuIcon[g.id], 22) : 'Symbol'} ▾</button>` : ''}
     <button class="p" data-act="neu" data-g="${g.id}">Anlegen</button></div></div>` +
+    (g.id === 'mas' ? vMasImport() : '') +
     (U.symZiel ? vSymbole(U.symZiel === 'edit' ? U.editIcon : U.neuIcon[U.symZiel.slice(4)] || '') : '');
 }
 
@@ -1687,6 +1714,14 @@ const A = {
   schTop: v => { U.sch = v; U.gast = null; U.gastZu = false; U.extra = false; U.form = null; U.neu = false; U.tab = 'kasse'; },
   masWahl: v => { U.mas = v; behalte(); },
   masUe: v => { U.masUe = v; },
+  masImport: () => {
+    const namen = planNamen($v('mas-imp')), neu = namen.filter(n => !S.mas.some(m => !m.weg && (m.name || '').trim().toLowerCase() === n.toLowerCase()));
+    if (!namen.length) { alert('Keine Namen erkannt. Bitte die Namen einfügen, einen je Zeile.'); return false; }
+    if (!neu.length) { alert('Alle ' + namen.length + ' Namen sind schon als Masseur*in angelegt.'); return false; }
+    if (!confirm(`${neu.length} neue Masseur*innen anlegen?\n\n${neu.join(', ')}${namen.length > neu.length ? `\n\n(${namen.length - neu.length} schon vorhanden, bleiben unverändert)` : ''}\n\nE-Mail und Telefon tragen Sie danach ein.`)) return false;
+    neu.forEach(n => S.mas.push({ id: id(), name: n }));
+  },
+  plan: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
   masUeZu: () => { U.masUe = null; },
   artWahl: v => { U.art = v; behalte(); },
   extraSchalter: () => { U.extra = !U.extra; U.extraSel = []; },
