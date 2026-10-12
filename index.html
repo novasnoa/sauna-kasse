@@ -219,8 +219,10 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .tk{border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0;background:#faf6f1;min-height:42px;padding:0 2px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#222;min-width:0;position:relative;overflow:visible}
 .tk.abend,.tk-leg.abend{background:#ece6f3}
 .tk-leg{display:inline-block;width:12px;height:12px;border-radius:3px;background:#faf6f1;border:1px solid var(--line);vertical-align:-1px}
-.tk em.tk-bl{font-style:normal;font-size:14px;position:absolute;left:5px;top:50%;transform:translateY(-50%);white-space:nowrap;z-index:1;display:inline-flex;align-items:center;gap:5px}
+.tk em.tk-bl{font-style:normal;font-size:14px;position:absolute;left:5px;top:50%;transform:translateY(-50%);white-space:nowrap;z-index:1;display:inline-flex;align-items:center;gap:5px;overflow:hidden}
 .tk em.tk-bl b{font-weight:700}
+.tk em.tk-bl span{font-size:13px;overflow:hidden;text-overflow:ellipsis;min-width:0;font-weight:400}
+.tk.belegt{cursor:pointer}
 .tk.belegt{border-right-color:transparent;border-bottom-color:transparent;background:#ddd7cf;color:#2b2118}
 .tk.belegt.bt{border-top:2px solid #6b4a2a}.tk.belegt.bb{border-bottom:2px solid #6b4a2a}
 .tk.belegt.bl{border-left:2px solid #6b4a2a}.tk.belegt.br{border-right:2px solid #6b4a2a}
@@ -266,7 +268,7 @@ const LIMIT_MS = 4 * 3600 * 1000;
 const MASSEUR_PROZENT = 70;
 const masseurAnteil = b => Math.round(b.preis * b.menge * MASSEUR_PROZENT / 100);
 const saunaAnteil = b => b.preis * b.menge - masseurAnteil(b);
-const U = { terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -724,7 +726,7 @@ function render() {
   const terSc = U.termine && $('termine-modal') ? $('termine-modal').scrollTop : 0;
   $('app').innerHTML = gesperrt ? vPin() : sperrKnopf + (U.tab === 'kasse' ? vKasse() : U.tab === 'abr' ? vAbr() : vStamm()) + suModale();
   if (U.plan) $('app').insertAdjacentHTML('beforeend', vPlan());
-  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; if (U.terPop) { $('app').insertAdjacentHTML('beforeend', vTerPop()); if ($('t-gast')) $('t-gast').focus(); } }
+  if (U.termine) { $('app').insertAdjacentHTML('beforeend', vTermine()); if ($('termine-modal')) $('termine-modal').scrollTop = terSc; if (U.terPop) { $('app').insertAdjacentHTML('beforeend', vTerPop()); if ($('t-gast')) $('t-gast').focus(); } if (U.terEdit) { $('app').insertAdjacentHTML('beforeend', vTerEdit()); if (U.keepGast !== null && $('t-gast')) $('t-gast').value = U.keepGast; } }
   if (U.schUe) $('app').insertAdjacentHTML('beforeend', vSchUe());   // ohne PIN: Übersicht für alle Mitarbeitenden
   if (gesperrt) pinAnzeige();
   if (keep) for (const i in keep) if ($(i)) $(i).value = keep[i];
@@ -1517,11 +1519,13 @@ const TK_VON = 720, TK_BIS = 1440, TK_RASTER = 5, TK_LAENGEN = [30, 40, 45, 60, 
 const zeitMin = z => { const [h, m] = String(z).split(':').map(Number); return h * 60 + m; };
 const minZeit = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const terDauer = x => x.dauer || 60;
+// Name und Telefon zum Anzeigen (ältere Termine hatten die Nummer in einem eigenen Feld).
+const terName = x => [x.gast, x.tel].filter(Boolean).join(' · ');
 // Name und Telefon gehen gemeinsam im Feld „gast“ an den Schichtplan (dessen Tabelle bleibt so unverändert; Grenze dort: 80 Zeichen).
 // Gekürzt wird der Name, damit die Nummer nie abgeschnitten wird.
 const terGast = x => { const tel = (x.tel || '').trim(), n = (x.gast || '').trim(); return tel ? (n.slice(0, Math.max(0, 80 - tel.length - 3)) + (n ? ' · ' : '') + tel).slice(0, 80) : n.slice(0, 80); };
-const terBelegt = datum => S.ter.filter(x => x.datum === datum).map(x => ({ a: zeitMin(x.zeit), b: zeitMin(x.zeit) + terDauer(x), x }));
-const terFrei = (datum, start, dauer) => start >= TK_VON && start + dauer <= TK_BIS && !terBelegt(datum).some(t => start < t.b && start + dauer > t.a);
+const terBelegt = (datum, ohneId) => S.ter.filter(x => x.datum === datum && x.id !== ohneId).map(x => ({ a: zeitMin(x.zeit), b: zeitMin(x.zeit) + terDauer(x), x }));
+const terFrei = (datum, start, dauer, ohneId) => start >= TK_VON && start + dauer <= TK_BIS && !terBelegt(datum, ohneId).some(t => start < t.b && start + dauer > t.a);
 const jetztMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 // Ein Beginn in der Vergangenheit (heute) ist nicht wählbar.
 const terMoeglich = (datum, start, dauer) => terFrei(datum, start, dauer) && !(datum === heute() && start < jetztMin());
@@ -1564,6 +1568,18 @@ function terBuche(gast) {
   S.ter.push({ id: id(), datum, nr: terminNr(zeit), zeit, dauer, was: 'Massage', gast: String(gast || '').trim() });
   U.terStart = null;
 }
+// Bearbeiten: Name/Telefon, Beginn und Länge. Der Termin selbst zählt bei der Prüfung auf Überschneidung nicht mit.
+function vTerEdit() {
+  const x = S.ter.find(t => t.id === U.terEdit); if (!x) return '';
+  const dauer = U.terEditDauer || terDauer(x);
+  return `<div id="ter-edit" class="modal" style="z-index:30;align-items:center" role="dialog" aria-label="Termin bearbeiten"><div class="card" style="width:min(520px,100%)">
+    <b>Termin bearbeiten</b> <span class="mut">${datumDe(x.datum)}</span>
+    <div class="row" style="margin-top:8px"><input id="t-gast" value="${esc(terName(x))}" placeholder="Name / Telefon" autocomplete="off" style="flex:1;min-width:0"></div>
+    <div class="row"><span class="mut">Beginn</span><input id="t-zeit" type="time" step="300" min="12:00" value="${esc(U.terEditZeit || x.zeit)}"></div>
+    <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terEditLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="p" data-act="terEditGo">Speichern</button><button data-act="terEditZu">Abbrechen</button><button data-act="terEditWeg" style="margin-left:auto">Löschen</button></div>
+  </div></div>`;
+}
 function vTerPop() {
   const wo = U.terStart !== null ? `${datumDe(U.terDatum)} · ${minZeit(U.terStart)}–${minZeit(U.terStart + (U.terDauer || 60))}` : '';
   return `<div id="ter-pop" class="modal" style="z-index:30;align-items:center" role="dialog" aria-label="Name und Telefon"><div class="card" style="width:min(460px,100%)">
@@ -1592,13 +1608,14 @@ function vTermine() {
         rand = `bt bb ${m === pa ? 'bl' : ''} ${m === pe - TK_RASTER ? 'br' : ''}`;
         const teile = []; for (let r = Math.floor(b.a / 60); r <= Math.floor((b.b - 1) / 60); r++) teile.push([Math.max(b.a, r * 60), Math.min(b.b, (r + 1) * 60)]);
         const gross = teile.reduce((g, t) => (t[1] - t[0] > g[1] - g[0] ? t : g), teile[0]);
-        if (m === gross[0]) kopf = `<em class="tk-bl">${ikone('massage', 20)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b></em>`;
+        // Der Text darf nur so breit sein wie der Teil des Kastens (Prozent der Zellenbreite), gekürzt mit „…“.
+        if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 10px)">${ikone('massage', 20)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></em>`;
       }
-      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – belegt: ' + esc(b.x.zeit) + '–' + minZeit(b.b) + (b.x.gast ? ' ' + esc(b.x.gast) : '') : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
+      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) + ' (antippen zum Bearbeiten)' : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
     }
     kal += `<div class="tk-zeile">${zellen}</div>`;
   }
-  const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}</b> ${schName(terminNr(x.zeit))} · ${terDauer(x)} Min.${x.gast ? ' · ' + esc(x.gast) : ''}${x.tel ? ' · ' + esc(x.tel) : ''}</span><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></div>`;
+  const zeile = x => `<div class="row" style="justify-content:space-between;align-items:center"><span><b>${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}</b> ${schName(terminNr(x.zeit))} · ${terDauer(x)} Min.${terName(x) ? ' · ' + esc(terName(x)) : ''}</span><span style="display:flex;gap:6px"><button data-act="terEdit" data-v="${x.id}">Bearbeiten</button><button data-act="terminWeg" data-v="${x.id}" aria-label="Termin löschen">Löschen</button></span></div>`;
   const tagListe = liste.filter(x => x.datum === datum);
   const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '<span class="mut">Wird an den Schichtplan gesendet.</span>';
   return `<div id="termine-modal" class="modal" role="dialog" aria-label="Massagetermine"><div class="card" style="width:min(860px,100%)">
@@ -1924,7 +1941,7 @@ const A = {
   plan: () => { U.plan = true; planLaden(); },
   planZu: () => { U.plan = false; },
   termine: () => { U.termine = true; terminOk = ''; planLaden(); },
-  terminZu: () => { U.termine = false; U.terPop = null; },
+  terminZu: () => { U.termine = false; U.terPop = null; U.terEdit = null; },
   terTag: v => { behalte(); const d = new Date((U.terDatum || heute()) + 'T12:00:00'); if (v === '0') U.terDatum = heute(); else { d.setDate(d.getDate() + (+v)); U.terDatum = d.toISOString().slice(0, 10); } U.terStart = null; return 'ter'; },
   terLaenge: v => { behalte(); U.terDauer = +v; if (U.terStart !== null && !terMoeglich(U.terDatum, U.terStart, U.terDauer)) U.terStart = null; return 'ter'; },
   terSlot: v => { behalte(); U.terStart = +v; return 'ter'; },
@@ -1938,6 +1955,19 @@ const A = {
   },
   terGo: () => { terBuche($v('t-gast')); },
   terPopZu: () => { U.terPop = null; },
+  terEdit: v => { U.terEdit = v; U.terEditDauer = 0; U.terEditZeit = ''; },
+  terEditLaenge: v => { U.terEditZeit = $v('t-zeit'); U.keepGast = $v('t-gast'); U.terEditDauer = +v; },
+  terEditZu: () => { U.terEdit = null; U.terEditDauer = 0; U.terEditZeit = ''; U.keepGast = null; },
+  terEditWeg: () => { const x = S.ter.find(t => t.id === U.terEdit); if (x && confirm(`Termin ${x.zeit} am ${datumDe(x.datum)} löschen?`)) { S.ter = S.ter.filter(t => t.id !== U.terEdit); A.terEditZu(); } },
+  terEditGo: () => {
+    const x = S.ter.find(t => t.id === U.terEdit); if (!x) return A.terEditZu();
+    const zeit = $v('t-zeit'), dauer = U.terEditDauer || terDauer(x), gast = $v('t-gast').trim();
+    if (!/^\d{1,2}:\d{2}$/.test(zeit)) { alert('Bitte einen Beginn angeben.'); return false; }
+    const start = zeitMin(zeit);
+    if (!terFrei(x.datum, start, dauer, x.id)) { alert('Zu dieser Zeit ist schon eine andere Massage (oder sie liegt außerhalb von 12:00–24:00). Bitte Beginn oder Länge ändern.'); return false; }
+    Object.assign(x, { zeit: minZeit(start), dauer, nr: terminNr(minZeit(start)), gast }); delete x.tel;
+    A.terEditZu();
+  },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   terminJetzt: () => { terminPush(true); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
@@ -2132,6 +2162,7 @@ document.addEventListener('click', e => {
   speichern(); render();
 });
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 't-gast' && U.terEdit) { e.preventDefault(); A.terEditGo(); speichern(); render(); return; }
   if (e.key === 'Enter' && e.target.id === 't-gast' && U.terPop) { e.preventDefault(); A.terGo(); speichern(); render(); return; }
   if (!$('pin-punkte') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
   if (/^\d$/.test(e.key)) A.pinZ(e.key); else if (e.key === 'Backspace') A.pinDel(); else if (e.key === 'Enter') A.pinOk(); else if (e.key === 'Escape') { A.pinAb(); render(); }

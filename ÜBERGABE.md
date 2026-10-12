@@ -73,3 +73,7 @@ Feld `gast` an den Schichtplan („Frau Meier · 0171 …“, höchstens 80 Zeic
 
 Name und Telefon sind ein Feld (`gast`): „Reservieren“ öffnet sofort ein kleines Fenster mit Eingabefeld (Tastatur) und „Reservieren“ daneben; das Feld darf
 leer bleiben. Über dem Kalender steht je Schicht, wer laut Schichtplan eingeteilt ist (aus plan.json; freie Plätze rot).
+
+**Bearbeiten:** Ein Antippen eines Kastens im Kalender (oder „Bearbeiten“ in der Liste) öffnet ein Fenster für Name/Telefon, Beginn und Länge (30/40/45/60/90),
+mit „Speichern“, „Abbrechen“ und „Löschen“. Der Termin selbst zählt bei der Prüfung auf Überschneidung nicht mit; bei einer Kollision bleibt das Fenster offen.
+Im Kasten stehen Symbol, Zeitraum und Name/Telefon (gekürzt mit „…“, vollständig im Tooltip).
