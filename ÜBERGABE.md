@@ -59,3 +59,10 @@ zwischen den Geräten ab. Zum Schichtplan geht jeweils die ganze Liste der komme
 ersetzt seinen Stand); offline wird später nachgeholt. Der Schlüssel ist fest im Kassen-Code (`TERMIN_SCHLUESSEL`), damit kein Gerät ihn eintippen muss; derselbe Wert liegt im Schichtplan als Secret
 `KASSE_SCHLUESSEL`. Er erlaubt nur, Massagetermine in den Schichtplan zu schreiben, nichts aus der Kasse zu lesen. Wechsel: beide Stellen ändern.
 Der Plan muss dafür ausgeliefert sein, siehe `ANLEITUNG.md` im Schichtplan-Repo.
+
+**Kalender bei „Termine“:** Tag wählen, Länge (30–120 Min.) wählen, Zeit im Viertelstundenraster antippen (12:00–24:00; Tagesschicht
+bis 18:30, danach Abendschicht). Belegte Zeiten und solche, an denen die Länge nicht mehr passt, sind ausgegraut. Es gibt nie zwei
+Massagen zur selben Zeit, unabhängig vom Masseur; direkt aneinander anschließen geht. Das wird auch beim Speichern noch einmal geprüft
+(ein anderes Gerät kann dieselbe Zeit inzwischen vergeben haben). Termine tragen `dauer`; ältere ohne Dauer zählen 60 Minuten. Zum
+Schichtplan geht die Dauer im Text mit („Rücken (60 Min.)“). Im Massageplan der Kasse steht hinter dem Namen / „frei“ die Zahl der
+Termine der Schicht.
