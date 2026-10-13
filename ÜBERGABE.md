@@ -161,3 +161,8 @@ Es gilt weiter die Warnung zum rückwirkenden Versand (`terminVon()`, bis zu dre
 
 **Termine sofort im Schichtplan (13.10.2026):** Zwei Ursachen behoben. (1) `terminPush` übersprang einen Aufruf, während ein Versand lief, und holte ihn erst im Fünf-Minuten-Takt nach; jetzt folgt nach jedem erfolgreichen Versand sofort ein neuer Vergleich (gemessen: zweite Änderung 200 ms nach der ersten wird gleich gesendet).
 (2) Der offene Schichtplan lud den Plan nur beim Öffnen; jetzt holt er alle 15 Sekunden still den Stand (Schichtplan-Repo, nach Deploy wirksam).
+
+**Rückwirkende Änderungen an den Schichtplan (13.10.2026):** Bisher ging nur der Stand ab heute an den Schichtplan; Änderungen an vergangenen Terminen (Verschieben, Löschen, Länge, Trinkgeld) kamen nie an. Jetzt meldet `terminPush` zusätzlich `tage`:
+die vergangenen Tage (bis 62 Tage zurück), deren Inhalt sich seit dem letzten erfolgreichen Versand geändert hat – oder die dieses Gerät früher gemeldet hat und die jetzt leer sind (`terminVergangen()`, Stand je Tag in `sk-termine-vergangen`).
+Der Schichtplan ersetzt nur diese Tage. Ein Gerät, das alte Termine nicht kennt, berührt sie nicht. Beim ersten Lauf nach der Umstellung werden einmalig alle bekannten vergangenen Tage gemeldet (gleicher Inhalt). `terminVon()` (drei Tage Rückgriff beim Trinkgeld) entfällt.
+**Voraussetzung:** Schichtplan mit dieser Schnittstelle ausgeliefert (`npm.cmd run deploy`); eine ältere Fassung ignoriert `tage`. Gemessen mit Attrappen: Änderung, Trinkgeld und Löschen eines vergangenen Termins, Server ersetzt nur den gemeldeten Tag.

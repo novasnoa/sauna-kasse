@@ -1653,20 +1653,26 @@ const jetztMin = () => { const d = new Date(); return d.getHours() * 60 + d.getM
 const terMoeglich = (datum, start, dauer) => terFrei(datum, start, dauer) && !(datum === heute() && start < jetztMin());
 const terminAnzeige = () => (S.ter || []).filter(x => x.datum >= heute()).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit));
 let terminLauf = false, terminFehler = '', terminOk = '';
-// Ab wann ersetzt die Kasse die Termine im Schichtplan? Normalerweise ab heute. Wurde das Trinkgeld eines vergangenen Tages abgeglichen (Abgleich am
-// Schichtende, auch am Folgetag), reicht der Stand ab diesem Tag zurück – höchstens drei Tage: Termine, die dieses Gerät nicht kennt (nicht abgeglichen),
-// würden im Schichtplan sonst mit ersetzt.
-function terminVon() {
-  const grenze = new Date(Date.now() - 3 * 86400000), g = `${grenze.getFullYear()}-${String(grenze.getMonth() + 1).padStart(2, '0')}-${String(grenze.getDate()).padStart(2, '0')}`;
-  const alt = (S.ter || []).filter(x => Number.isInteger(x.tip) && x.datum < heute() && x.datum >= g).map(x => x.datum).sort()[0];
-  return alt || heute();
+// Rückwirkende Änderungen: Der Schichtplan ersetzt die Termine ab heute komplett (`von`). Vergangene Tage meldet die Kasse zusätzlich einzeln (`tage`),
+// aber nur die, deren Inhalt sich seit dem letzten erfolgreichen Versand geändert hat – oder die dieses Gerät früher gemeldet hat und nun leer sind.
+// So kann ein Gerät, das alte Termine nicht kennt, sie im Schichtplan nicht löschen: es berührt nur Tage, die es selbst kennt oder gemeldet hat.
+const TERMIN_VERGANGEN = 'sk-termine-vergangen', TERMIN_RUECK_TAGE = 62;
+function terminVergangen() {
+  const g = new Date(Date.now() - TERMIN_RUECK_TAGE * 86400000), grenze = `${g.getFullYear()}-${String(g.getMonth() + 1).padStart(2, '0')}-${String(g.getDate()).padStart(2, '0')}`;
+  const jetzt = {};
+  for (const x of S.ter || []) if (x.datum < heute() && x.datum >= grenze) (jetzt[x.datum] = jetzt[x.datum] || []).push(terminSatz(x));
+  const stand = {}; for (const d in jetzt) stand[d] = JSON.stringify(jetzt[d].sort((p, q) => p.id.localeCompare(q.id)));
+  let gesendet = {}; try { gesendet = JSON.parse(lsGet(TERMIN_VERGANGEN) || '{}') || {}; } catch (e) {}
+  const tage = [...new Set([...Object.keys(stand), ...Object.keys(gesendet)])].filter(d => d >= grenze && (stand[d] || '') !== (gesendet[d] || ''));
+  return { tage, jetzt, stand };
 }
+const terminSatz = x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : '') + (x.mas ? ` · ${x.mas}` : ''), gast: terGast(x), trinkgeld: Number.isInteger(x.tip) ? x.tip : null });
 async function terminPush(erzwingen) {
   const key = TERMIN_SCHLUESSEL;
   if (terminLauf || !navigator.onLine) return;
-  const von = terminVon();
-  const termine = (S.ter || []).filter(x => x.datum >= von).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit)).map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : '') + (x.mas ? ` · ${x.mas}` : ''), gast: terGast(x), trinkgeld: Number.isInteger(x.tip) ? x.tip : null }));
-  const stand = JSON.stringify({ von, termine });
+  const von = heute(), verg = terminVergangen();
+  const termine = [...terminAnzeige(), ...(S.ter || []).filter(x => verg.tage.includes(x.datum))].map(terminSatz);
+  const stand = JSON.stringify({ von, tage: verg.tage, termine });
   // Ein Gerät, das noch nie etwas gesendet hat und nichts hat (frisch eingerichtet, Google-Abgleich noch nicht durch), darf den Stand im
   // Schichtplan nicht mit einer leeren Liste leeren.
   if (!termine.length && !lsGet(TERMIN_SENT)) return;
@@ -1675,7 +1681,7 @@ async function terminPush(erzwingen) {
   try {
     const r = await fetch(SCHICHTPLAN_URL + 'api/kasse/termine', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Schichtplan': '1', Authorization: 'Bearer ' + key }, body: stand });
     if (!r.ok) throw new Error(r.status === 401 ? 'Schlüssel wird vom Schichtplan nicht angenommen' : r.status === 503 ? 'Schichtplan ist dafür noch nicht eingerichtet' : 'Schichtplan antwortet mit ' + r.status);
-    lsSet(TERMIN_SENT, stand); terminFehler = ''; terminOk = uhr();
+    lsSet(TERMIN_SENT, stand); lsSet(TERMIN_VERGANGEN, JSON.stringify(verg.stand)); terminFehler = ''; terminOk = uhr();
   } catch (e) { terminFehler = e.message === 'Failed to fetch' ? 'Keine Verbindung zum Schichtplan – wird später erneut versucht' : e.message; }
   terminLauf = false;
   if (U.termine) render();
