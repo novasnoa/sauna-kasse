@@ -738,6 +738,12 @@ function vSumup() {
     <div class="row"><input id="su-pair" size="12" placeholder="Kopplungscode" autocomplete="off" autocapitalize="characters"><input id="su-gname" size="14" placeholder="Name" value="Tresen" autocomplete="off">
       <button class="p" data-act="suKoppeln">Gerät koppeln</button></div>
     <div id="su-kopp" class="mut"></div></div>
+  <div class="card"><h2>Tagesabruf (Trinkgeld je Zahlung)</h2>
+    <div class="mut">Holt die Zahlungen eines Tages von SumUp und liest für jede ab dem Mindestbetrag den Einzelbeleg (Betrag, Trinkgeld, Posten, Beleg-Nr.). Nur lesend; es wird nichts gebucht.
+    Benutzt Händlernummer und API-Schlüssel von oben (oder den entsperrten Zugang). Der Schlüssel braucht das Recht <code>transactions.history</code> oder <code>receipts.read</code>.</div>
+    <div class="row"><input id="su-tag" type="date" value="${heute()}"><input id="su-min" size="6" inputmode="decimal" value="40" title="Mindestbetrag in €" style="max-width:90px"><span class="mut">€ und mehr</span>
+      <button class="p" data-act="suTagHolen">Zahlungen holen</button></div>
+    <div id="su-tag-erg" class="mut" style="margin-top:8px">Noch nicht abgerufen.</div></div>
   <div class="card"><h2>Dauerhaft einrichten</h2>
     <div class="mut">Gerät: <b>${geraet ? esc(gname || geraet) : 'noch keines gewählt (erst „Zugriff testen“, dann „Dieses Gerät verwenden“)'}</b> ·
       Zugang: <b>${suDa() ? (suOffen() ? 'gespeichert, entsperrt' : 'gespeichert, gesperrt') : 'nicht gespeichert'}</b></div>
@@ -2082,6 +2088,41 @@ const A = {
   },
   // Kopplung: POST …/readers mit dem Code vom Gerät (laut SumUp: Rechte readers.write; Antwort: Reader mit id, Status processing → paired,
   // sobald das Gerät bestätigt). Bei Erfolg wird das neue Gerät gleich als das zu verwendende gemerkt.
+  // Tagesabruf: Verlauf des Tages (GET /v2.1/merchants/{code}/transactions/history, Rechte transactions.history/read), danach je Zahlung ab dem Mindestbetrag
+  // der Einzelbeleg (GET /v1.1/receipts/{id}?mid={code}, Rechte receipts.read/transactions.history). Trinkgeld und Posten stehen nur im Beleg, nicht in der Liste.
+  suTagHolen: () => {
+    const code = ($v('su-code').trim() || lsGet('sk-sumup-code')).toUpperCase(), key = $v('su-key').trim() || SU.key, e = $('su-tag-erg');
+    const tag = $v('su-tag') || heute(), min = parseFloat(String($v('su-min')).replace(',', '.')) || 0;
+    if (!code || !key) { e.className = 'warn'; e.textContent = 'Bitte oben Händlernummer und API-Schlüssel eintragen (oder den Zugang entsperren).'; return false; }
+    e.className = 'mut'; e.textContent = 'Hole Zahlungen …';
+    (async () => {
+      const von = new Date(tag + 'T00:00:00'), bis = new Date(von.getTime() + 86400000);
+      let pfad = `/v2.1/merchants/${suEnc(code)}/transactions/history?oldest_time=${suEnc(von.toISOString())}&newest_time=${suEnc(bis.toISOString())}&limit=100&order=ascending`;
+      const alle = []; let seiten = 0;
+      while (pfad && seiten++ < 10) {
+        const r = await sumupAnfrage(pfad, key);
+        if (!r.ok) { e.className = 'warn'; e.textContent = 'Verlauf: ' + suFehlerText(r); return; }
+        alle.push(...(r.json && Array.isArray(r.json.items) ? r.json.items : Array.isArray(r.json) ? r.json : []));
+        const next = ((r.json && r.json.links) || []).find(l => l.rel === 'next');
+        pfad = next && next.href ? `/v2.1/merchants/${suEnc(code)}/transactions/history?${String(next.href).split('?').pop()}` : null;
+      }
+      const ok = alle.filter(t => (!t.status || t.status === 'SUCCESSFUL') && parseFloat(t.amount) >= min);
+      const zeilen = []; let roh = null, fehler = 0;
+      for (const t of ok.slice(0, 40)) {
+        const r = await sumupAnfrage(`/v1.1/receipts/${suEnc(t.transaction_code || t.id || t.transaction_id)}?mid=${suEnc(code)}`, key);
+        if (!r.ok) { fehler++; zeilen.push({ t, fehler: suFehlerText(r) }); continue; }
+        if (!roh) roh = r.json;
+        zeilen.push({ t, d: (r.json && r.json.transaction_data) || {} });
+      }
+      const uhrZ = x => x ? new Date(x).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '–';
+      const posten = d => (d.products || []).map(p => `${p.quantity && p.quantity !== 1 ? p.quantity + '× ' : ''}${p.name}`).join(', ') || '–';
+      const tipp = zeilen.reduce((a, z) => a + (z.d ? parseFloat(z.d.tip_amount || 0) : 0), 0);
+      e.className = ''; e.innerHTML = `<div><b>${alle.length}</b> Zahlung(en) am ${datumDe(tag)}, davon <b>${ok.length}</b> ab ${min.toLocaleString('de-DE')} € ${ok.length > 40 ? '(die ersten 40 mit Beleg)' : ''}${fehler ? ` · <span class="warn">${fehler} Beleg(e) nicht lesbar</span>` : ''} · Trinkgeld zusammen <b>${tipp.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</b></div>
+        ${zeilen.length ? `<table><tr><th>Zeit</th><th class="r">Betrag</th><th class="r">Trinkgeld</th><th>Posten</th><th>Beleg-Nr.</th></tr>${zeilen.map(z => z.fehler ? `<tr><td>${uhrZ(z.t.timestamp)}</td><td class="r">${esc(String(z.t.amount))}</td><td colspan="3" class="warn">${esc(z.fehler)}</td></tr>` : `<tr><td>${uhrZ(z.d.timestamp || z.t.timestamp)}</td><td class="r">${esc(String(z.d.amount ?? z.t.amount))}</td><td class="r">${z.d.tip_amount ? esc(String(z.d.tip_amount)) : '–'}</td><td>${esc(posten(z.d))}</td><td>${esc(z.d.receipt_no || '–')}</td></tr>`).join('')}</table>` : ''}
+        ${roh ? `<details style="margin-top:8px"><summary class="mut">Rohantwort des ersten Belegs anzeigen</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(JSON.stringify(roh, null, 1))}</pre></details>` : ''}`;
+    })();
+    return false;
+  },
   suKoppeln: () => {
     const code = $v('su-code').trim().toUpperCase(), key = $v('su-key').trim() || SU.key, pc = $v('su-pair').trim().toUpperCase().replace(/\s+/g, ''), name = $v('su-gname').trim() || 'Tresen', e = $('su-kopp');
     if (!code || !key) { e.className = 'warn'; e.textContent = 'Bitte oben Händlernummer und API-Schlüssel eintragen.'; return false; }

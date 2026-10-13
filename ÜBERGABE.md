@@ -126,3 +126,7 @@ Datumsfelds); Tag antippen wählt ihn. In jeder Tageszelle steht unter den Namen
 bei Netz, und keine stille Google-Anmeldung. Grund: das Google-Fenster ging gelegentlich von selbst auf. Abgeglichen wird nur auf Knopfdruck (☁ oben bzw. Stammdaten → Sicherung & Google); dann darf auch das
 Google-Fenster aufgehen. Der Schichtplan (plan.json) und die Termine an den Schichtplan laufen unabhängig davon. **Folge:** Termine, Stammdaten und Schichten gleichen sich zwischen Geräten nicht mehr von selbst ab.
 Automatische Mails an Masseur*innen brauchen eine bestehende Anmeldung; ohne sie meldet die Kasse „Anmeldung nötig“, bis von Hand abgeglichen wurde.
+
+**Tagesabruf bei SumUp (Test, nur lesend):** Stammdaten → Kartengerät → „Tagesabruf“ (volle Ansicht: `?modus=voll`). Holt den Verlauf eines Tages (`GET /v2.1/merchants/{code}/transactions/history`, mit Seitenfolge) und liest für jede
+erfolgreiche Zahlung ab dem Mindestbetrag (Vorgabe 40 €, bis 40 Belege) den Einzelbeleg (`GET /v1.1/receipts/{id}?mid={code}`): Zeit, Betrag, Trinkgeld, Posten, Beleg-Nr.; darunter die Rohantwort des
+ersten Belegs. Zweck: sehen, was die Belege des Solo wirklich enthalten, bevor das Trinkgeld den Massagen zugeordnet wird (Posten vorhanden? Zeitstempel? Trinkgeld getrennt?). Gegen echtes SumUp noch nicht erprobt (nur gegen eine Attrappe).
