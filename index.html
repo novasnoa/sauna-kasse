@@ -908,6 +908,10 @@ setInterval(markiere, 30000);
    liest die Dateien der anderen. So gibt es nie zwei Schreiber auf einer Datei und damit keine Überschreib-Unfälle.
    Zusammengeführt wird je Datensatz (Id): der zuletzt geänderte gewinnt, neue Sätze kommen dazu, Gelöschtes
    steht als Vermerk in S.tot. Die Geräteuhren sollten ungefähr stimmen (automatische Zeit am iPad ist Standard). */
+// Hintergrundabgleich mit Google: AUS. Warum: Die stille Anfrage (prompt: none) öffnet auf dem iPad gelegentlich trotzdem das Google-Fenster und stört die
+// Arbeit. Der Schichtplan kommt über plan.json und ist davon unabhängig. Abgeglichen wird nur noch auf Knopfdruck (Stammdaten → Sicherung & Google,
+// bzw. ☁ oben); wer den Hintergrundabgleich wieder will, setzt GOOGLE_AUTO auf true.
+const GOOGLE_AUTO = false;
 const GOOGLE_CLIENT_ID = '710064191222-nt56kg78p26guueu0is853evlqg9vl2a.apps.googleusercontent.com';   // Öffentlich, kein Geheimnis; das Client-Secret wird nicht gebraucht.
 const COLL = ['ma', 'mas', 'lei', 'war', 'kun', 'sch', 'ter', 'ger'], LISTKEYS = ['gaeste', 'buch', 'zahl'];
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
@@ -1039,6 +1043,7 @@ const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
 let gTokP = null;
 function gToken(interaktiv, mail) {
   if (G.tok && Date.now() < G.exp - 60000 && (!mail || G.tokMail)) return Promise.resolve();
+  if (!interaktiv && !GOOGLE_AUTO) return Promise.reject(new Error('login'));   // keine stille Anmeldung im Hintergrund
   if (gTokP) return gTokP.then(() => {}, () => {}).then(() => gToken(interaktiv, mail));
   gTokP = gLade().then(() => new Promise((ok, no) => {
     const c = google.accounts.oauth2.initTokenClient({
@@ -1063,13 +1068,15 @@ async function gUpload(json) {
   const r = await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body });
   G.eigen = (await r.json()).id;
 }
-async function gSync(interaktiv) {
+async function gSync(interaktiv, manuell) {
+  if (!GOOGLE_AUTO && !interaktiv && !manuell) return;   // nichts im Hintergrund
+  const ia = interaktiv || manuell;
   if (!G.an || !G.cid || G.busy) return;
   if (!navigator.onLine) return gStatus('offline');
   G.busy = true; gStatus('sync');
   try {
     // Fehlt nur das Mail-Recht (noch nicht freigegeben), soll der Abgleich trotzdem laufen.
-    try { await gToken(interaktiv, automailAn()); } catch (e) { if (!automailAn()) throw e; await gToken(interaktiv, false); }
+    try { await gToken(ia, automailAn()); } catch (e) { if (!automailAn()) throw e; await gToken(ia, false); }
     geraetEintragen(); stempeln();
     const l = await (await gApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=100&fields=files(id,name,modifiedTime)&q=' + encodeURIComponent("name contains 'sauna-kasse-'"))).json();
     const eigenName = 'sauna-kasse-' + G.dev + '.json'; let neu = false;
@@ -1164,7 +1171,7 @@ function mailAuftrag(sch) {
   if (ohne.length) setTimeout(() => alert('Keine E-Mail-Adresse hinterlegt bei: ' + ohne.join(', ') + '.\nFür sie wird keine Mail gesendet – bitte in den Stammdaten nachtragen.'), 50);
   setTimeout(() => mailRunde(false), 300);
 }
-function gPlan() { clearTimeout(G.timer); G.timer = setTimeout(() => gSync(false), 2500); }
+function gPlan() { if (!GOOGLE_AUTO) return; clearTimeout(G.timer); G.timer = setTimeout(() => gSync(false), 2500); }
 // Nicht mitten in einer Eingabe neu zeichnen (am Tablet würde sonst die Tastatur verschwinden).
 function gNeuZeichnen() {
   const a = document.activeElement;
@@ -1176,7 +1183,7 @@ function gStatus(st, fehler) {
   G.status = st; G.fehler = fehler || ''; if (st === 'ok') G.zeit = uhr();
   const w = $('wolke'); if (!w) return;
   w.hidden = !G.an;
-  const t = { ok: ['☁ ✓ ' + G.zeit, 'gJetzt'], sync: ['☁ gleicht ab …', 'gJetzt'], anmelden: ['☁ Bei Google anmelden', 'gLogin'], fehler: ['☁ Fehler – antippen', 'gJetzt'], offline: ['☁ wartet auf Netz', 'gJetzt'], aus: ['', 'gJetzt'] }[st] || ['', 'gJetzt'];
+  const t = { ok: ['☁ ✓ ' + G.zeit, 'gJetzt'], sync: ['☁ gleicht ab …', 'gJetzt'], manuell: ['☁ von Hand abgleichen', 'gJetzt'], anmelden: ['☁ Bei Google anmelden', 'gLogin'], fehler: ['☁ Fehler – antippen', 'gJetzt'], offline: ['☁ wartet auf Netz', 'gJetzt'], aus: ['', 'gJetzt'] }[st] || ['', 'gJetzt'];
   w.textContent = t[0]; w.dataset.act = t[1];
   w.style.cssText = st === 'anmelden' || st === 'fehler' ? 'background:#fde8e4;color:var(--warn);border-color:var(--warn)' : 'background:transparent;color:#fff;border:1px solid #ffffff80';
   const z = $('g-status'); if (z) z.textContent = gText();
@@ -1200,7 +1207,7 @@ function vSync() {
 setInterval(() => { gSync(false); mailRunde(false); }, 30000);
 addEventListener('online', () => { gSync(false); mailRunde(false); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) gSync(false); });
-if (G.an) { gStatus('sync'); setTimeout(() => gSync(false), 800); }
+if (G.an) { if (GOOGLE_AUTO) { gStatus('sync'); setTimeout(() => gSync(false), 800); } else gStatus('manuell'); }
 
 /* ---------- Offline ---------- */
 // Die Buchungen liegen im Browser, die Seite selbst im Zwischenspeicher des Service Workers (sw.js).
@@ -2143,7 +2150,7 @@ const A = {
   mailAus: () => { S.einst = { automail: false, _t: Date.now() }; G.mailFehler = ''; },
   mailJetzt: () => { mailRunde(true); return false; },
   gAus: () => { if (confirm('Google-Abgleich auf diesem Gerät ausschalten? Die Daten hier bleiben erhalten.')) { G.an = false; G.tok = ''; lsSet('sk-gsync', '0'); gStatus('aus'); } },
-  gJetzt: () => { gSync(false); return false; },
+  gJetzt: () => { gSync(false, true); return false; },
   gLogin: () => { gSync(true); return false; },
   kopiere: v => {
     const t = MT[v];

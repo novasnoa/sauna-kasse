@@ -121,3 +121,8 @@ laut Schichtplan und die Zahl der Termine; Tippen auf einen Tag wählt ihn aus.
 
 **Korrektur (13.10.2026):** Die Tagesübersicht trägt kein Datum; sie gilt immer für den Tag, der auf der Hauptseite gewählt ist. Die **Monatsübersicht** öffnet ein Tipp auf das Datum auf der Hauptseite (statt des
 Datumsfelds); Tag antippen wählt ihn. In jeder Tageszelle steht unter den Namen eine kleine **Zeitlinie** (12–24 Uhr, Strich bei 18:30) mit den eingetragenen Massagen; bei vergangenen Tagen grau.
+
+**Google-Abgleich nur von Hand (13.10.2026):** Der Hintergrundabgleich ist aus (`GOOGLE_AUTO = false` im Code): kein Abgleich beim Start, nach dem Speichern, alle 30 Sekunden, beim Zurückkehren in die App oder
+bei Netz, und keine stille Google-Anmeldung. Grund: das Google-Fenster ging gelegentlich von selbst auf. Abgeglichen wird nur auf Knopfdruck (☁ oben bzw. Stammdaten → Sicherung & Google); dann darf auch das
+Google-Fenster aufgehen. Der Schichtplan (plan.json) und die Termine an den Schichtplan laufen unabhängig davon. **Folge:** Termine, Stammdaten und Schichten gleichen sich zwischen Geräten nicht mehr von selbst ab.
+Automatische Mails an Masseur*innen brauchen eine bestehende Anmeldung; ohne sie meldet die Kasse „Anmeldung nötig“, bis von Hand abgeglichen wurde.
