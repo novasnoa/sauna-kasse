@@ -55,7 +55,7 @@ body.modus-massage main{max-width:none;margin:0;padding:0}
 .mp-gruppe>button:not(.chip){flex:0 0 auto}
 .mp-rechts{margin-left:auto}
 .mp-oben #mp-wolke,.mp-oben .mp-rechts{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 10px}
-.mp-oben #mp-wolke{max-width:170px}
+.mp-oben #mp-wolke{max-width:230px}
 .mp-block{display:flex;flex-direction:column;min-height:0}
 .mp-kopf{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:2px 0 2px 34px;min-height:30px}
 .mp-sch{font-size:13px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
@@ -269,8 +269,10 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .tk em.tk-bl{font-style:normal;font-size:14px;position:absolute;left:5px;top:50%;transform:translateY(-50%);white-space:nowrap;z-index:1;display:inline-flex;align-items:center;gap:5px;overflow:hidden}
 .tk em.tk-bl b{font-weight:700}
 .tk em.tk-bl span{font-size:13px;overflow:hidden;text-overflow:ellipsis;min-width:0;font-weight:400}
+.tk.v1:not(.sel){background:#ece3d6}.tk.abend.v1:not(.sel){background:#dcd1ea}.tk.weg.v1:not(.sel){background:#e4e0d9}   /* Viertelstunden im Wechsel hell/dunkel */
 .tk.belegt{cursor:pointer}
 .tk.belegt{border-right-color:transparent;border-bottom-color:transparent;background:#ddd7cf;color:#2b2118}
+.tk.belegt.f1{background:#c4d8c6}.tk.belegt.f2{background:#e2c9a6}   /* aufeinanderfolgende Massagen in drei Farbtönen: Anfang und Ende sofort sichtbar */
 .tk.belegt.bt{border-top:2px solid #6b4a2a}.tk.belegt.bb{border-bottom:2px solid #6b4a2a}
 .tk.belegt.bl{border-left:2px solid #6b4a2a}.tk.belegt.br{border-right:2px solid #6b4a2a}
 
@@ -1646,6 +1648,9 @@ const terName = x => (x.fest ? '🔒 ' : '') + [x.gast, x.tel].filter(Boolean).j
 // Name und Telefon gehen gemeinsam im Feld „gast“ an den Schichtplan (dessen Tabelle bleibt so unverändert; Grenze dort: 80 Zeichen).
 // Gekürzt wird der Name, damit die Nummer nie abgeschnitten wird.
 const terGast = x => { const tel = (x.tel || '').trim(), n = (x.gast || '').trim(); return tel ? (n.slice(0, Math.max(0, 80 - tel.length - 3)) + (n ? ' · ' : '') + tel).slice(0, 80) : n.slice(0, 80); };
+// Farbton einer Zelle: freie Zellen wechseln je Viertelstunde (v0/v1), belegte je Massage durch (f0/f1/f2, der Reihe nach nach Beginn).
+const tkViertel = m => 'v' + (Math.floor(m / 15) % 2);
+const tkFarbe = (belegt, b) => 'f' + ([...belegt].sort((p, q) => p.a - q.a || p.b - q.b).findIndex(t => t.x.id === b.x.id) % 3);
 const terBelegt = (datum, ohneId) => S.ter.filter(x => x.datum === datum && x.id !== ohneId).map(x => ({ a: zeitMin(x.zeit), b: zeitMin(x.zeit) + terDauer(x), x }));
 const terFrei = (datum, start, dauer, ohneId) => start >= TK_VON && start + dauer <= TK_BIS && !terBelegt(datum, ohneId).some(t => start < t.b && start + dauer > t.a);
 const jetztMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
@@ -1759,7 +1764,7 @@ function mpBlock(art, datum, dauer, sel, belegt) {
         rand = `bt bb ${m === teil[0] ? 'bl' : ''} ${m === teil[1] - TK_RASTER ? 'br' : ''}`;
         if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 8px)"><span class="tk-l">${ikone('massage', 18)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></span><span class="tk-mas">${esc(terMas(b.x))}</span></em>`;
       }
-      z += `<button class="tk ${art === 'spaet' ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
+      z += `<button class="tk ${art === 'spaet' ? 'abend' : ''} ${b ? 'belegt ' + rand + ' ' + tkFarbe(belegt, b) : (ok ? '' : 'weg') + ' ' + tkViertel(m)} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
     }
     return `<div class="mp-zeile">${z}</div>`;
   }).join('');
@@ -2008,7 +2013,7 @@ function vTermine() {
         // Der Text darf nur so breit sein wie der Teil des Kastens (Prozent der Zellenbreite), gekürzt mit „…“.
         if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 10px)">${ikone('massage', 20)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></em>`;
       }
-      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) + ' (antippen zum Bearbeiten)' : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
+      zellen += `<button class="tk ${m >= 1110 ? 'abend' : ''} ${b ? 'belegt ' + rand + ' ' + tkFarbe(belegt, b) : (ok ? '' : 'weg') + ' ' + tkViertel(m)} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) + ' (antippen zum Bearbeiten)' : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
     }
     kal += `<div class="tk-zeile">${zellen}</div>`;
   }
