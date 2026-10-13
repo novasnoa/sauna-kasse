@@ -60,7 +60,10 @@ body.modus-massage main{max-width:none;margin:0;padding:0}
 .mp-mitte{flex:1;text-align:center;font-size:15px}
 .mp .pn{font-size:18px;padding:3px 12px;margin:0}
 .mp .mp-kopf{min-height:36px}
-.mp .tk em.tk-bl{font-size:17px}
+.mp .tk em.tk-bl{font-size:17px;justify-content:space-between;gap:10px}
+.mp .tk-l{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow:hidden}
+.mp .tk-l span{overflow:hidden;text-overflow:ellipsis}
+.mp .tk-mas{flex:0 0 auto;font-weight:700;font-size:16px;color:var(--acc);padding-right:4px}
 .mp .tk em.tk-bl span{font-size:16px}
 .mp-leer{align-items:center;justify-content:center;gap:24px}
 .mp-leer h1{margin:0;color:var(--acc)}
@@ -301,7 +304,7 @@ const rechnung = (um, ti) => {
   const g = um + ti, netto = ustNetto(g), massMit = Math.round(um * MASSEUR_PROZENT / 100), massOhne = Math.round(ustNetto(um) * MASSEUR_PROZENT / 100), tkOhne = ustNetto(ti);
   return { um, ti, g, netto, mwst: g - netto, massMit, massOhne, tkOhne, mit: massMit + ti, ohne: massOhne + tkOhne };
 };
-const U = { mpZu: false, terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { keepMas: null, mpZu: false, terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -1616,7 +1619,7 @@ async function terminPush(erzwingen) {
   const key = TERMIN_SCHLUESSEL;
   if (terminLauf || !navigator.onLine) return;
   const von = heute();
-  const termine = terminAnzeige().map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : ''), gast: terGast(x) }));
+  const termine = terminAnzeige().map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : '') + (x.mas ? ` · ${x.mas}` : ''), gast: terGast(x) }));
   const stand = JSON.stringify({ von, termine });
   // Ein Gerät, das noch nie etwas gesendet hat und nichts hat (frisch eingerichtet, Google-Abgleich noch nicht durch), darf den Stand im
   // Schichtplan nicht mit einer leeren Liste leeren.
@@ -1633,6 +1636,11 @@ async function terminPush(erzwingen) {
 }
 addEventListener('online', () => terminPush());
 setInterval(() => terminPush(), 5 * 60000);
+// Masseur*in eines Termins: ausdrücklich gewählt (Bearbeiten), sonst die Eingeteilten der Schicht laut Schichtplan. Zur Wahl stehen alle Personen
+// des Schichtplans (plan.json, Rollen wie Owner und „Geschlossen“ sind herausgefiltert).
+const masseurListe = () => planNamen(((PLAN && PLAN.personen) || []).join('\n'));
+const schichtMasseure = (datum, art) => PLAN ? PLAN.shifts.filter(x => x.date === datum && x.shiftType === art).flatMap(x => x.claims.map(k => String(k.name).replace(/\s+massage$/i, ''))) : [];
+const terMas = x => x.mas || schichtMasseure(x.datum, schichtArt(terminNr(x.zeit))).join(' / ');
 // Wer laut Schichtplan an diesem Tag in der Schicht steht (aus plan.json, siehe planLaden); freie Plätze rot.
 function eingeteilt(datum, art) {
   if (!PLAN) return '<span class="mut">Plan nicht geladen</span>';
@@ -1655,7 +1663,8 @@ function vTerEdit() {
   const dauer = U.terEditDauer || terDauer(x);
   return `<div id="ter-edit" class="modal" style="z-index:30;align-items:center" role="dialog" aria-label="Termin bearbeiten"><div class="card" style="width:min(520px,100%)">
     <b>Termin bearbeiten</b> <span class="mut">${datumDe(x.datum)}</span>
-    <div class="row" style="margin-top:8px"><input id="t-gast" value="${esc(terName(x))}" placeholder="Name / Telefon" autocomplete="off" style="flex:1;min-width:0"></div>
+    <div class="row" style="margin-top:8px"><input id="t-gast" value="${esc(terName(x))}" placeholder="Anmerkung (Name / Telefon)" autocomplete="off" style="flex:1;min-width:0"></div>
+    <div class="row"><span class="mut">Masseur*in</span><select id="t-mas" style="flex:1;min-width:0"><option value="">laut Schichtplan${schichtMasseure(x.datum, schichtArt(terminNr(x.zeit))).length ? ' (' + esc(schichtMasseure(x.datum, schichtArt(terminNr(x.zeit))).join(' / ')) + ')' : ''}</option>${[...new Set([...masseurListe(), ...(x.mas ? [x.mas] : [])])].map(n => `<option value="${esc(n)}" ${n === (U.keepMas !== null ? U.keepMas : x.mas) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
     <div class="row"><span class="mut">Beginn</span><input id="t-zeit" type="time" step="300" min="12:00" value="${esc(U.terEditZeit || x.zeit)}"></div>
     <div class="row">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terEditLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="p" data-act="terEditGo">Speichern</button><button data-act="terEditZu">Abbrechen</button><button data-act="terEditWeg" style="margin-left:auto">Löschen</button></div>
@@ -1694,7 +1703,7 @@ function mpBlock(art, datum, dauer, sel, belegt) {
       if (b) {
         const teile = mpTeile(b), teil = teile.find(p => m >= p[0] && m < p[1]), gross = teile.reduce((g, p) => (p[1] - p[0] > g[1] - g[0] ? p : g), teile[0]);
         rand = `bt bb ${m === teil[0] ? 'bl' : ''} ${m === teil[1] - TK_RASTER ? 'br' : ''}`;
-        if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 8px)">${ikone('massage', 18)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></em>`;
+        if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 8px)"><span class="tk-l">${ikone('massage', 18)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></span><span class="tk-mas">${esc(terMas(b.x))}</span></em>`;
       }
       z += `<button class="tk ${art === 'spaet' ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
     }
@@ -2121,16 +2130,16 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; },
   mpAuf: () => { U.mpZu = false; },
   terEdit: v => { U.terEdit = v; U.terEditDauer = 0; U.terEditZeit = ''; },
-  terEditLaenge: v => { U.terEditZeit = $v('t-zeit'); U.keepGast = $v('t-gast'); U.terEditDauer = +v; },
-  terEditZu: () => { U.terEdit = null; U.terEditDauer = 0; U.terEditZeit = ''; U.keepGast = null; },
+  terEditLaenge: v => { U.terEditZeit = $v('t-zeit'); U.keepGast = $v('t-gast'); U.keepMas = $v('t-mas'); U.terEditDauer = +v; },
+  terEditZu: () => { U.terEdit = null; U.terEditDauer = 0; U.terEditZeit = ''; U.keepGast = null; U.keepMas = null; },
   terEditWeg: () => { const x = S.ter.find(t => t.id === U.terEdit); if (x && confirm(`Termin ${x.zeit} am ${datumDe(x.datum)} löschen?`)) { S.ter = S.ter.filter(t => t.id !== U.terEdit); A.terEditZu(); } },
   terEditGo: () => {
     const x = S.ter.find(t => t.id === U.terEdit); if (!x) return A.terEditZu();
-    const zeit = $v('t-zeit'), dauer = U.terEditDauer || terDauer(x), gast = $v('t-gast').trim();
+    const zeit = $v('t-zeit'), dauer = U.terEditDauer || terDauer(x), gast = $v('t-gast').trim(), mas = $v('t-mas');
     if (!/^\d{1,2}:\d{2}$/.test(zeit)) { alert('Bitte einen Beginn angeben.'); return false; }
     const start = zeitMin(zeit);
     if (!terFrei(x.datum, start, dauer, x.id)) { alert('Zu dieser Zeit ist schon eine andere Massage (oder sie liegt außerhalb von 12:00–24:00). Bitte Beginn oder Länge ändern.'); return false; }
-    Object.assign(x, { zeit: minZeit(start), dauer, nr: terminNr(minZeit(start)), gast }); delete x.tel;
+    Object.assign(x, { zeit: minZeit(start), dauer, nr: terminNr(minZeit(start)), gast }); delete x.tel; if (mas) x.mas = mas; else delete x.mas;
     A.terEditZu();
   },
   terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },

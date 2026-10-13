@@ -108,3 +108,7 @@ Der Hintergrundabgleich (Google, Termine an den Schichtplan) läuft weiter.
 
 **Umschalten bis zum eigenen Schalter:** Adresse `https://sauna-kassensystem.web.app/?modus=voll` zeigt die ganze Kasse, `…/?modus=massage` wieder nur den Massageplan. Die Wahl
 bleibt auf dem Gerät gespeichert. Voreinstellung im Code: `MODUS_STANDARD`. Für Anmeldung bei Google, Stammdaten oder SumUp also einmal auf `?modus=voll` gehen und danach zurückstellen.
+
+**Masseur*in je Termin:** Ganz rechts auf jedem Massagestreifen steht die Masseur*in: ausdrücklich gewählt (`mas` am Termin), sonst die Eingeteilten der Schicht laut Schichtplan.
+Antippen des Streifens öffnet „Termin bearbeiten“: Anmerkung (Name/Telefon), Masseur*in (alle Personen des Schichtplans aus plan.json, ohne Owner/„Geschlossen“; Voreinstellung
+„laut Schichtplan“), Beginn und Länge. Eine ausdrücklich gewählte Masseur*in geht im Text „Massage (60 Min.) · Name“ an den Schichtplan mit.
