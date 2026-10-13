@@ -148,3 +148,9 @@ Gemessen mit Attrappe: Vorauszahlung (Frage, Antwort, Neuberechnung) und Sammelz
 **Google-Knopf im Massageplan (13.10.2026):** Rechts neben „Tagesübersicht“ steht ein Knopf „☁ Google anmelden“ (`#mp-wolke`, Aktion `gMp`, Beschriftung `gMpText()`). Ungebunden: meldet bei Google an und gleicht ab; danach zeigt er „☁ ✓ Uhrzeit“, antippen = Abgleich von Hand,
 bei abgelaufener Anmeldung „Bei Google anmelden“. Zweck: am Rechner (Büro) mit demselben Google-Konto Termine eintragen und sehen – Termine liegen im Abgleich (`ter`), der Rechner darf schreiben (Termine stehen nicht in `SCHREIBEND`).
 Der Abgleich bleibt Handarbeit (`GOOGLE_AUTO = false`). Geprüft: Darstellung bei 1024, 820, 768 Breite ohne Überlauf; die Anmeldung selbst nur bis zum Klick (Google ist in der Testumgebung gesperrt).
+
+**Trinkgeld an den Schichtplan (13.10.2026):** Ist ein Abgleich vollständig (keine Frage offen), erscheint je Schicht der Knopf „Trinkgeld an den Schichtplan senden“ (`mpAbglUebernehmen`).
+Er schreibt das zugeordnete Trinkgeld in Cent als `tip` an jeden zugeordneten Termin (0 = Zuordnung ohne Trinkgeld; fehlt `tip`, ist es unbekannt) und stößt den Versand an. `terminPush` schickt `trinkgeld` je Termin mit (`null`, wenn unbekannt);
+der Schichtplan zeigt es in der Abrechnung. Danach steht „✓ Trinkgeld im Schichtplan“. Wird die Länge eines Termins geändert, entfällt sein `tip` (anderer Preis).
+**Rückwirkend:** Der Versand ersetzt die Termine im Schichtplan ab `terminVon()` – heute, bei abgeglichenem Trinkgeld eines vergangenen Tages bis zu drei Tage zurück. Termine, die dieses Gerät in diesem Zeitraum nicht kennt (nicht per Google abgeglichen), würden im Schichtplan mit ersetzt:
+den Abgleich also am Gerät machen, an dem die Termine eingetragen wurden, oder vorher von Hand abgleichen. Gemessen mit Attrappe (Schichtplan-Server und SumUp).

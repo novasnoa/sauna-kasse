@@ -1653,11 +1653,19 @@ const jetztMin = () => { const d = new Date(); return d.getHours() * 60 + d.getM
 const terMoeglich = (datum, start, dauer) => terFrei(datum, start, dauer) && !(datum === heute() && start < jetztMin());
 const terminAnzeige = () => (S.ter || []).filter(x => x.datum >= heute()).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit));
 let terminLauf = false, terminFehler = '', terminOk = '';
+// Ab wann ersetzt die Kasse die Termine im Schichtplan? Normalerweise ab heute. Wurde das Trinkgeld eines vergangenen Tages abgeglichen (Abgleich am
+// Schichtende, auch am Folgetag), reicht der Stand ab diesem Tag zurück – höchstens drei Tage: Termine, die dieses Gerät nicht kennt (nicht abgeglichen),
+// würden im Schichtplan sonst mit ersetzt.
+function terminVon() {
+  const grenze = new Date(Date.now() - 3 * 86400000), g = `${grenze.getFullYear()}-${String(grenze.getMonth() + 1).padStart(2, '0')}-${String(grenze.getDate()).padStart(2, '0')}`;
+  const alt = (S.ter || []).filter(x => Number.isInteger(x.tip) && x.datum < heute() && x.datum >= g).map(x => x.datum).sort()[0];
+  return alt || heute();
+}
 async function terminPush(erzwingen) {
   const key = TERMIN_SCHLUESSEL;
   if (terminLauf || !navigator.onLine) return;
-  const von = heute();
-  const termine = terminAnzeige().map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : '') + (x.mas ? ` · ${x.mas}` : ''), gast: terGast(x) }));
+  const von = terminVon();
+  const termine = (S.ter || []).filter(x => x.datum >= von).sort((a, b) => (a.datum + a.nr + a.zeit).localeCompare(b.datum + b.nr + b.zeit)).map(x => ({ id: x.id, date: x.datum, shiftType: schichtArt(x.nr), zeit: x.zeit, was: x.was + (x.dauer ? ` (${x.dauer} Min.)` : '') + (x.mas ? ` · ${x.mas}` : ''), gast: terGast(x), trinkgeld: Number.isInteger(x.tip) ? x.tip : null }));
   const stand = JSON.stringify({ von, termine });
   // Ein Gerät, das noch nie etwas gesendet hat und nichts hat (frisch eingerichtet, Google-Abgleich noch nicht durch), darf den Stand im
   // Schichtplan nicht mit einer leeren Liste leeren.
@@ -1873,7 +1881,10 @@ function vAbgleich(nr, res, a) {
     const aufgeht = !r.offen.length && !res.frage && r.treffer.length === anzahl;
     inh = `<table>${r.treffer.map(zeile).join('')}</table>
       ${r.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${r.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
-      ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}`;
+      ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
+      ${r.treffer.length && !res.frage ? (r.treffer.every(t => t.x.tip === t.tip)
+        ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>'
+        : `<div class="row" style="margin-top:6px"><button type="button" class="p" data-act="mpAbglUebernehmen" data-n="${nr}">Trinkgeld an den Schichtplan senden</button></div>`) : ''}`;
   }
   return `<div class="mp-abgl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line,#ccc)"><div class="row"><b>${schName(nr)}</b><span class="mut">${anzahl} Massage${anzahl === 1 ? '' : 'n'}</span>
     <button type="button" data-act="mpAbgleich">Abgleich</button></div>${inh}</div>`;
@@ -2382,6 +2393,13 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; U.mpTag = false; U.mpMonat = null; },
   mpAuf: () => { U.mpZu = false; },
   mpTag: () => { U.mpTag = true; },
+  // Übernimmt das abgeglichene Trinkgeld je Termin (Cent) und schickt es an den Schichtplan. Nur Zuordnungen, bei denen keine Frage mehr offen ist.
+  mpAbglUebernehmen: (v, el) => {
+    const datum = U.terDatum || heute(), a = U.abgleich; if (!a || !a.zahl || a.datum !== datum) return false;
+    const res = abgleichBerechnen(datum, a.zahl, a.vers); if (!res || res.frage) return false;
+    for (const t of res[+el.dataset.n].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x) x.tip = t.tip; }
+    setTimeout(() => terminPush(true), 0);
+  },
   mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; } },
   mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
   mpTagZu: () => { U.mpTag = false; U.mpMonat = null; },
@@ -2399,6 +2417,7 @@ const A = {
     if (!/^\d{1,2}:\d{2}$/.test(zeit)) { alert('Bitte einen Beginn angeben.'); return false; }
     const start = zeitMin(zeit);
     if (!terFrei(x.datum, start, dauer, x.id)) { alert('Zu dieser Zeit ist schon eine andere Massage (oder sie liegt außerhalb von 12:00–24:00). Bitte Beginn oder Länge ändern.'); return false; }
+    if (dauer !== terDauer(x)) delete x.tip;   // anderer Preis: das abgeglichene Trinkgeld gehörte zur alten Länge
     Object.assign(x, { zeit: minZeit(start), dauer, nr: terminNr(minZeit(start)), gast }); delete x.tel; if (mas) x.mas = mas; else delete x.mas;
     A.terEditZu();
   },
