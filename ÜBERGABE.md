@@ -158,3 +158,6 @@ den Abgleich also am Gerät machen, an dem die Termine eingetragen wurden, oder 
 **Korrektur (13.10.2026): automatisch statt per Knopf.** Der Knopf „Trinkgeld an den Schichtplan senden“ entfällt. `abgleichUebernehmen()` schreibt das zugeordnete Trinkgeld (`tip`, Cent) bei jeder Änderung des Abgleichs selbst in die Termine
 und schickt es über `speichern()` → `terminPush()` an den Schichtplan: nach dem Abruf und nach jeder beantworteten Frage. Solange eine Frage offen ist, wird nichts gesendet. Die Anzeige „✓ Trinkgeld im Schichtplan“ bleibt.
 Es gilt weiter die Warnung zum rückwirkenden Versand (`terminVon()`, bis zu drei Tage).
+
+**Termine sofort im Schichtplan (13.10.2026):** Zwei Ursachen behoben. (1) `terminPush` übersprang einen Aufruf, während ein Versand lief, und holte ihn erst im Fünf-Minuten-Takt nach; jetzt folgt nach jedem erfolgreichen Versand sofort ein neuer Vergleich (gemessen: zweite Änderung 200 ms nach der ersten wird gleich gesendet).
+(2) Der offene Schichtplan lud den Plan nur beim Öffnen; jetzt holt er alle 15 Sekunden still den Stand (Schichtplan-Repo, nach Deploy wirksam).

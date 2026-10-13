@@ -1679,6 +1679,8 @@ async function terminPush(erzwingen) {
   } catch (e) { terminFehler = e.message === 'Failed to fetch' ? 'Keine Verbindung zum Schichtplan – wird später erneut versucht' : e.message; }
   terminLauf = false;
   if (U.termine) render();
+  // Änderte sich der Stand, während der Versand lief, wurde der Aufruf oben übersprungen – sofort nachholen statt erst in fünf Minuten.
+  if (!terminFehler) setTimeout(() => terminPush(), 300);
 }
 addEventListener('online', () => terminPush());
 setInterval(() => terminPush(), 5 * 60000);
