@@ -1763,6 +1763,77 @@ function vMpSeite() {
 const preisFuer = l => { const re = new RegExp('(^|\\D)' + l + '(\\D|$)'), x = aktive('lei').find(m => m.massage && re.test(m.name || '')); return x ? x.preis : null; };
 const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 // Tagesübersicht: die Massagen des gewählten Tages je Masseur*in und Schicht, mit Anzahl, Minuten und (wenn Preise bekannt) Betrag.
+/* ---------- Abgleich am Schichtende (Stufe 1): SumUp-Zahlungen den Terminen zuordnen ----------
+   Der Preis je Länge ist fest (Robert, 13.10.2026) und nicht aus den Stammdaten abgeleitet: dort steht nicht verlässlich, welche
+   Massage welche Länge hat. Eine Zahlung ist nicht immer nur Massage; deshalb zählt der Plan: für jeden Termin wird eine Zahlung
+   gesucht, deren Betrag ohne Trinkgeld genau der Preis seiner Länge ist. Alles andere (Sammelzahlungen, überzählige Zahlungen,
+   Termine ohne Zahlung) wird nur ANGEZEIGT – Rückfragen und Bericht folgen in Stufe 2 und 3. Es wird nichts geschrieben. */
+const MASSAGE_PREISE = { 30: 4000, 40: 5500, 45: 6000, 60: 7500, 90: 11000 };
+const massagePreis = l => MASSAGE_PREISE[l] || null;
+const abgleichZeit = ms => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+async function abgleichHolen(datum) {
+  const code = (lsGet('sk-sumup-code') || '').toUpperCase();
+  if (!code) { U.abgleich = { datum, fehler: 'Keine Händlernummer hinterlegt (einmal unter ?modus=voll → Stammdaten → Kartengerät).' }; return render(); }
+  if (!suOffen()) { U.suEntsperren = { danach: () => abgleichHolen(datum) }; return render(); }
+  U.abgleich = { datum, laeuft: true }; render();
+  try {
+    const von = new Date(datum + 'T00:00:00'), bis = new Date(von.getTime() + 86400000);
+    let pfad = `/v2.1/merchants/${suEnc(code)}/transactions/history?oldest_time=${suEnc(von.toISOString())}&newest_time=${suEnc(bis.toISOString())}&limit=100&order=ascending`;
+    const alle = []; let seiten = 0;
+    while (pfad && seiten++ < 10) {
+      const r = await sumupAnfrage(pfad, SU.key);
+      if (!r.ok) throw new Error('Verlauf: ' + suFehlerText(r));
+      alle.push(...(r.json && Array.isArray(r.json.items) ? r.json.items : Array.isArray(r.json) ? r.json : []));
+      const next = ((r.json && r.json.links) || []).find(l => l.rel === 'next');
+      pfad = next && next.href ? `/v2.1/merchants/${suEnc(code)}/transactions/history?${String(next.href).split('?').pop()}` : null;
+    }
+    // Billigste Massage 40 €: darunter kann es keine Massage sein. Den Beleg braucht es nur für das Trinkgeld.
+    const kand = alle.filter(t => (!t.status || t.status === 'SUCCESSFUL') && Math.round(parseFloat(t.amount) * 100) >= 4000);
+    const zahl = []; let ohneBeleg = 0;
+    for (const t of kand.slice(0, 60)) {
+      const r = await sumupAnfrage(`/v1.1/receipts/${suEnc(t.transaction_code || t.id || t.transaction_id)}?mid=${suEnc(code)}`, SU.key);
+      const d = r.ok ? ((r.json && r.json.transaction_data) || {}) : null; if (!d) ohneBeleg++;
+      const brutto = Math.round(parseFloat(t.amount) * 100), tip = d ? Math.round(parseFloat(d.tip_amount || 0) * 100) : 0;
+      zahl.push({ id: t.transaction_code || t.id || t.transaction_id, ms: new Date(t.timestamp).getTime(), brutto, tip, netto: brutto - tip, nr: d && d.receipt_no || '', posten: d && Array.isArray(d.products) ? d.products.map(p => p.name).join(', ') : '' });
+    }
+    U.abgleich = { datum, zahl, gesamt: alle.length, ohneBeleg, zu: kand.length > 60 };
+  } catch (e) { U.abgleich = { datum, fehler: String(e.message || e) }; }
+  render();
+}
+// Zuordnung je Schicht: erst gleiche Länge/gleicher Betrag, bei mehreren Treffern die zeitlich nächste Zahlung zum Terminende.
+function abgleichZuordnen(datum, nr, zahl) {
+  const termine = S.ter.filter(x => x.datum === datum && terminNr(x.zeit) === nr).sort((a, b) => a.zeit.localeCompare(b.zeit));
+  const frei = new Set(zahl.map((z, i) => i)), treffer = [], offen = [];
+  for (const x of termine) {
+    const pr = massagePreis(terDauer(x)), ende = new Date(datum + 'T' + minZeit(zeitMin(x.zeit) + terDauer(x)) + ':00').getTime();
+    let best = -1;
+    for (const i of frei) if (zahl[i].netto === pr && (best < 0 || Math.abs(zahl[i].ms - ende) < Math.abs(zahl[best].ms - ende))) best = i;
+    if (best < 0) { offen.push(x); continue; }
+    frei.delete(best); treffer.push({ x, z: zahl[best] });
+  }
+  return { termine, treffer, offen };
+}
+function vAbgleich(nr) {
+  const datum = U.terDatum || heute(), a = U.abgleich && U.abgleich.datum === datum ? U.abgleich : null;
+  const anzahl = S.ter.filter(x => x.datum === datum && terminNr(x.zeit) === nr).length;
+  let inh = '';
+  if (a && a.laeuft) inh = '<div class="mut">Hole Zahlungen von SumUp …</div>';
+  else if (a && a.fehler) inh = `<div class="warn">${esc(a.fehler)}</div>`;
+  else if (a && a.zahl) {
+    const z = abgleichZuordnen(datum, nr, a.zahl), tipp = z.treffer.reduce((s2, t) => s2 + t.z.tip, 0);
+    const zeile = t => `<tr><td>${esc(t.x.zeit)}</td><td>${terDauer(t.x)} Min.</td><td>${esc(terName(t.x))}</td><td>${abgleichZeit(t.z.ms)} gezahlt</td><td class="r">${eur(t.z.netto)}</td><td class="r">${t.z.tip ? '+ ' + eur(t.z.tip) + ' Trinkgeld' : ''}</td></tr>`;
+    // Zahlungen, die zu keinem Termin passten, gehören keiner Schicht allein – sie stehen bei beiden, damit nichts verschwindet.
+    const benutzt = new Set(); for (const n of [1, 2]) for (const t of abgleichZuordnen(datum, n, a.zahl).treffer) benutzt.add(t.z.id);
+    const uebrig = a.zahl.filter(q => !benutzt.has(q.id));
+    inh = `<table>${z.treffer.map(zeile).join('')}</table>
+      ${z.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${z.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
+      ${z.treffer.length ? `<div style="margin-top:6px"><b>${z.treffer.length}</b> von ${z.termine.length} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
+      ${uebrig.length ? `<div class="mut" style="margin-top:6px">Zahlungen ab 40 € ohne Termin dieser Länge (Sammelzahlung, andere Schicht oder keine Massage): ${uebrig.map(q => `${abgleichZeit(q.ms)} ${eur(q.brutto)}${q.tip ? ' (davon ' + eur(q.tip) + ' Trinkgeld)' : ''}${q.posten ? ' – ' + esc(q.posten) : ''}`).join('; ')}</div>` : ''}
+      ${a.ohneBeleg ? `<div class="warn" style="margin-top:6px">${a.ohneBeleg} Beleg(e) nicht lesbar – Trinkgeld dort unbekannt.</div>` : ''}`;
+  }
+  return `<div class="mp-abgl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line,#ccc)"><div class="row"><b>${schName(nr)}</b><span class="mut">${anzahl} Massage${anzahl === 1 ? '' : 'n'}</span>
+    <button type="button" data-act="mpAbgleich">Abgleich</button></div>${inh}</div>`;
+}
 function vMpTag() {
   const datum = U.terDatum || heute(), d = new Date(datum + 'T12:00:00'), wt = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
   const liste = S.ter.filter(x => x.datum === datum).sort((a, b) => a.zeit.localeCompare(b.zeit));
@@ -1781,6 +1852,7 @@ function vMpTag() {
   return `<div id="mp-tag" class="modal" style="z-index:25" role="dialog" aria-label="Tagesübersicht"><div class="card" style="width:min(820px,100%)">
     <div class="row"><b style="font-size:18px">Tagesübersicht</b></div>
     ${inhalt || '<div class="mut" style="margin:14px 0">Keine Massagen an diesem Tag.</div>'}
+    ${vAbgleich(1)}${vAbgleich(2)}
     ${gruppen.length ? `<table style="margin-top:10px"><tr><th>Gesamt: ${ges.n} Massage${ges.n === 1 ? '' : 'n'} · ${ges.min} Min.</th><th class="r">${ges.fehlt && !ges.euro ? '–' : eur(ges.euro)}</th></tr>${ges.fehlt ? '<tr><td class="mut" colspan="2">Für Massagen ohne hinterlegten Preis steht „–“ (Preis je Länge: Massage in den Stammdaten mit der Minutenzahl im Namen anlegen, z. B. „Ganzkörper 60“).</td></tr>' : ''}</table>` : ''}
     <div class="row" style="margin-top:12px"><button class="p" data-act="mpTagZu">Schließen</button></div></div></div>`;
 }
@@ -1815,6 +1887,7 @@ function renderMassage() {
   $('app').innerHTML = U.mpZu ? vMpStart() : vMpSeite();
   if (U.mpTag && !U.mpZu) $('app').insertAdjacentHTML('beforeend', vMpTag());
   if (U.mpMonat && !U.mpZu) $('app').insertAdjacentHTML('beforeend', vMpMonat());
+  if (U.suEntsperren) { $('app').insertAdjacentHTML('beforeend', suModale()); const m = $('app').lastElementChild; m.style.zIndex = 40; if ($('su-pass')) $('su-pass').focus(); }
   if (U.terPop) { $('app').insertAdjacentHTML('beforeend', vTerPop()); if ($('t-gast')) $('t-gast').focus(); }
   if (U.terEdit) { $('app').insertAdjacentHTML('beforeend', vTerEdit()); if (U.keepGast !== null && $('t-gast')) $('t-gast').value = U.keepGast; }
   modalSperre();
@@ -2250,6 +2323,7 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; U.mpTag = false; U.mpMonat = null; },
   mpAuf: () => { U.mpZu = false; },
   mpTag: () => { U.mpTag = true; },
+  mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
   mpTagZu: () => { U.mpTag = false; U.mpMonat = null; },
   mpMonat: () => { U.mpMonat = (U.terDatum || heute()).slice(0, 7); },
   mpMonatZu: () => { U.mpMonat = null; },

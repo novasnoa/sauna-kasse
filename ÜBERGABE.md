@@ -130,3 +130,10 @@ Automatische Mails an Masseur*innen brauchen eine bestehende Anmeldung; ohne sie
 **Tagesabruf bei SumUp (Test, nur lesend):** Stammdaten → Kartengerät → „Tagesabruf“ (volle Ansicht: `?modus=voll`). Holt den Verlauf eines Tages (`GET /v2.1/merchants/{code}/transactions/history`, mit Seitenfolge) und liest für jede
 erfolgreiche Zahlung ab dem Mindestbetrag (Vorgabe 40 €, bis 40 Belege) den Einzelbeleg (`GET /v1.1/receipts/{id}?mid={code}`): Zeit, Betrag, Trinkgeld, Posten, Beleg-Nr.; darunter die Rohantwort des
 ersten Belegs. Zweck: sehen, was die Belege des Solo wirklich enthalten, bevor das Trinkgeld den Massagen zugeordnet wird (Posten vorhanden? Zeitstempel? Trinkgeld getrennt?). Gegen echtes SumUp noch nicht erprobt (nur gegen eine Attrappe).
+
+**Abgleich am Schichtende, Stufe 1 (13.10.2026):** In der Tagesübersicht stehen unter den Abrechnungen zwei Bereiche, Tagesschicht und Abendschicht, jeder mit dem Knopf **Abgleich**.
+Er holt (nach Eingabe des SumUp-Codes, einmal je Start) den Verlauf des gewählten Tages und zu jeder erfolgreichen Zahlung ab 40 € den Einzelbeleg (nur lesend) und ordnet
+die Zahlungen den Terminen der Schicht zu: Betrag ohne Trinkgeld = Preis der Länge (fest: 30 = 40 €, 40 = 55 €, 45 = 60 €, 60 = 75 €, 90 = 110 €, `MASSAGE_PREISE`); bei mehreren Treffern
+gilt die zeitlich nächste Zahlung zum Terminende. Angezeigt werden Zuordnungen mit Trinkgeld, Termine ohne Zahlung und Zahlungen ohne Termin (Sammelzahlung, andere Schicht, keine Massage).
+**Es wird nichts gespeichert oder verschickt.** Offen: Stufe 2 (Rückfragen bei überzähligen Zahlungen, Sammelzahlungen, Trinkgeld anteilig nach Preis), Stufe 3 (Bericht am Bildschirm, per Mail, später in den Schichtplan).
+Nur mit einer Attrappe der SumUp-Schnittstelle gemessen; ob die echten Belege `tip_amount` und `receipt_no` so liefern, zeigt erst ein echter Tag (Tagesabruf unter `?modus=voll`).
