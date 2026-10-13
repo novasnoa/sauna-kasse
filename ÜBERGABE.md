@@ -154,3 +154,7 @@ Er schreibt das zugeordnete Trinkgeld in Cent als `tip` an jeden zugeordneten Te
 der Schichtplan zeigt es in der Abrechnung. Danach steht „✓ Trinkgeld im Schichtplan“. Wird die Länge eines Termins geändert, entfällt sein `tip` (anderer Preis).
 **Rückwirkend:** Der Versand ersetzt die Termine im Schichtplan ab `terminVon()` – heute, bei abgeglichenem Trinkgeld eines vergangenen Tages bis zu drei Tage zurück. Termine, die dieses Gerät in diesem Zeitraum nicht kennt (nicht per Google abgeglichen), würden im Schichtplan mit ersetzt:
 den Abgleich also am Gerät machen, an dem die Termine eingetragen wurden, oder vorher von Hand abgleichen. Gemessen mit Attrappe (Schichtplan-Server und SumUp).
+
+**Korrektur (13.10.2026): automatisch statt per Knopf.** Der Knopf „Trinkgeld an den Schichtplan senden“ entfällt. `abgleichUebernehmen()` schreibt das zugeordnete Trinkgeld (`tip`, Cent) bei jeder Änderung des Abgleichs selbst in die Termine
+und schickt es über `speichern()` → `terminPush()` an den Schichtplan: nach dem Abruf und nach jeder beantworteten Frage. Solange eine Frage offen ist, wird nichts gesendet. Die Anzeige „✓ Trinkgeld im Schichtplan“ bleibt.
+Es gilt weiter die Warnung zum rückwirkenden Versand (`terminVon()`, bis zu drei Tage).

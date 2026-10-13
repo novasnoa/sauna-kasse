@@ -1810,6 +1810,7 @@ async function abgleichHolen(datum) {
       zahl.push({ id: t.transaction_code || t.id || t.transaction_id, ms: new Date(t.timestamp).getTime(), brutto, tip, netto: brutto - tip, nr: d && d.receipt_no || '', posten: d && Array.isArray(d.products) ? d.products.map(p => p.name).join(', ') : '' });
     }
     U.abgleich = { datum, zahl, gesamt: alle.length, ohneBeleg, zu: kand.length > 60 };
+    abgleichUebernehmen();
   } catch (e) { U.abgleich = { datum, fehler: String(e.message || e) }; }
   render();
 }
@@ -1882,12 +1883,19 @@ function vAbgleich(nr, res, a) {
     inh = `<table>${r.treffer.map(zeile).join('')}</table>
       ${r.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${r.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
       ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
-      ${r.treffer.length && !res.frage ? (r.treffer.every(t => t.x.tip === t.tip)
-        ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>'
-        : `<div class="row" style="margin-top:6px"><button type="button" class="p" data-act="mpAbglUebernehmen" data-n="${nr}">Trinkgeld an den Schichtplan senden</button></div>`) : ''}`;
+      ${r.treffer.length && !res.frage ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>' : ''}`;
   }
   return `<div class="mp-abgl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line,#ccc)"><div class="row"><b>${schName(nr)}</b><span class="mut">${anzahl} Massage${anzahl === 1 ? '' : 'n'}</span>
     <button type="button" data-act="mpAbgleich">Abgleich</button></div>${inh}</div>`;
+}
+// Automatisch bei jeder Änderung des Abgleichs (Abruf, beantwortete Frage): das zugeordnete Trinkgeld je Termin (Cent) in `tip` schreiben, speichern
+// und damit an den Schichtplan schicken (speichern → terminPush). Solange eine Frage offen ist, geschieht nichts – eine halbe Zuordnung wird nicht gesendet.
+function abgleichUebernehmen() {
+  const a = U.abgleich; if (!a || !a.zahl) return;
+  const res = abgleichBerechnen(a.datum, a.zahl, a.vers); if (!res || res.frage) return;
+  let neu = false;
+  for (const nr of [1, 2]) for (const t of res[nr].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x && x.tip !== t.tip) { x.tip = t.tip; neu = true; } }
+  if (neu) speichern();
 }
 function vAbgleichBlock() {
   const datum = U.terDatum || heute(), a = U.abgleich && U.abgleich.datum === datum ? U.abgleich : null;
@@ -2393,14 +2401,7 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; U.mpTag = false; U.mpMonat = null; },
   mpAuf: () => { U.mpZu = false; },
   mpTag: () => { U.mpTag = true; },
-  // Übernimmt das abgeglichene Trinkgeld je Termin (Cent) und schickt es an den Schichtplan. Nur Zuordnungen, bei denen keine Frage mehr offen ist.
-  mpAbglUebernehmen: (v, el) => {
-    const datum = U.terDatum || heute(), a = U.abgleich; if (!a || !a.zahl || a.datum !== datum) return false;
-    const res = abgleichBerechnen(datum, a.zahl, a.vers); if (!res || res.frage) return false;
-    for (const t of res[+el.dataset.n].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x) x.tip = t.tip; }
-    setTimeout(() => terminPush(true), 0);
-  },
-  mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; } },
+  mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; abgleichUebernehmen(); } },
   mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
   mpTagZu: () => { U.mpTag = false; U.mpMonat = null; },
   mpMonat: () => { U.mpMonat = (U.terDatum || heute()).slice(0, 7); },
