@@ -112,3 +112,9 @@ bleibt auf dem Gerät gespeichert. Voreinstellung im Code: `MODUS_STANDARD`. Fü
 **Masseur*in je Termin:** Ganz rechts auf jedem Massagestreifen steht die Masseur*in: ausdrücklich gewählt (`mas` am Termin), sonst die Eingeteilten der Schicht laut Schichtplan.
 Antippen des Streifens öffnet „Termin bearbeiten“: Anmerkung (Name/Telefon), Masseur*in (alle Personen des Schichtplans aus plan.json, ohne Owner/„Geschlossen“; Voreinstellung
 „laut Schichtplan“), Beginn und Länge. Eine ausdrücklich gewählte Masseur*in geht im Text „Massage (60 Min.) · Name“ an den Schichtplan mit.
+
+**Kopfzeilen und Übersichten im Massageplan:** Die Steuerung von „Massagetermine“ (‹ Datum › Heute) und „Länge“ (fünf Längen) ist gleich breit und links bündig (Länge steht unter dem ersten Feld
+von Massagetermine); in schmalen Fenstern schrumpfen beide gleich. Ganz rechts oben steht **Tagesübersicht**: die Massagen des Tages je Masseur*in und Schicht mit Anzahl, Minuten und –
+wenn der Preis bekannt ist – Betrag. Der Preis je Länge kommt aus den Massagen in den Stammdaten, deren Name die Minutenzahl enthält („Ganzkörper 60“); ohne Treffer steht „–“.
+Ein Klick auf den Monat in der Tagesübersicht öffnet die **Monatsübersicht** (nahezu bildschirmfüllend): je Tag die eingeplanten Masseur*innen (T = Tagesschicht, A = Abendschicht, rot = frei)
+laut Schichtplan und die Zahl der Termine; Tippen auf einen Tag wählt ihn aus.
