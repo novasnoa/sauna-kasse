@@ -137,3 +137,10 @@ die Zahlungen den Terminen der Schicht zu: Betrag ohne Trinkgeld = Preis der Lä
 gilt die zeitlich nächste Zahlung zum Terminende. Angezeigt werden Zuordnungen mit Trinkgeld, Termine ohne Zahlung und Zahlungen ohne Termin (Sammelzahlung, andere Schicht, keine Massage).
 **Es wird nichts gespeichert oder verschickt.** Offen: Stufe 2 (Rückfragen bei überzähligen Zahlungen, Sammelzahlungen, Trinkgeld anteilig nach Preis), Stufe 3 (Bericht am Bildschirm, per Mail, später in den Schichtplan).
 Nur mit einer Attrappe der SumUp-Schnittstelle gemessen; ob die echten Belege `tip_amount` und `receipt_no` so liefern, zeigt erst ein echter Tag (Tagesabruf unter `?modus=voll`).
+
+**Abgleich, Stufe 2 (13.10.2026):** `abgleichBerechnen()` ordnet jetzt beide Schichten gemeinsam zu. Eine Zahlung gehört zunächst der Schicht, in der sie fiel (Grenze 18:30).
+Hat eine Schicht mehr Zahlungen einer Länge als Termine und fehlt der anderen Schicht genau so eine, ist eine Verwechslung möglich: die App **fragt**, welche Zahlung zur anderen
+Schicht gehört (Vorschlag: die früheste, also die vorab bezahlte); bei mehreren überzähligen wird nacheinander gefragt. Gibt es keine Wahl, wird ohne Frage verschoben. Fehlt der anderen Schicht
+nichts, bleibt die Zahlung „ohne Termin“. **Sammelzahlungen:** passt der Betrag ohne Trinkgeld zur Summe von 2 oder 3 offenen Terminen, gilt sie für diese; das Trinkgeld wird nach Preis verteilt
+(Trinkgeld × Preis ÷ Betrag ohne Trinkgeld). Zahlungen, die auch so zu nichts passen (z. B. Massage plus Ware), bleiben offen und werden gezeigt. Antworten gelten nur bis zum nächsten Abgleich; gespeichert wird nichts.
+Gemessen mit Attrappe: Vorauszahlung (Frage, Antwort, Neuberechnung) und Sammelzahlung mit Trinkgeld. Offen: Stufe 3 (Bericht).

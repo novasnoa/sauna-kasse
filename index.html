@@ -1800,39 +1800,92 @@ async function abgleichHolen(datum) {
   } catch (e) { U.abgleich = { datum, fehler: String(e.message || e) }; }
   render();
 }
-// Zuordnung je Schicht: erst gleiche Länge/gleicher Betrag, bei mehreren Treffern die zeitlich nächste Zahlung zum Terminende.
-function abgleichZuordnen(datum, nr, zahl) {
-  const termine = S.ter.filter(x => x.datum === datum && terminNr(x.zeit) === nr).sort((a, b) => a.zeit.localeCompare(b.zeit));
-  const frei = new Set(zahl.map((z, i) => i)), treffer = [], offen = [];
-  for (const x of termine) {
-    const pr = massagePreis(terDauer(x)), ende = new Date(datum + 'T' + minZeit(zeitMin(x.zeit) + terDauer(x)) + ':00').getTime();
-    let best = -1;
-    for (const i of frei) if (zahl[i].netto === pr && (best < 0 || Math.abs(zahl[i].ms - ende) < Math.abs(zahl[best].ms - ende))) best = i;
-    if (best < 0) { offen.push(x); continue; }
-    frei.delete(best); treffer.push({ x, z: zahl[best] });
+/* Stufe 2. Zahlungen gehören zunächst der Schicht, in der sie fielen (Grenze 18:30 wie bei den Terminen). Wer vorab zahlt oder
+   nachträglich, verschiebt eine Zahlung in die andere Schicht: Stimmt in einer Schicht die Zahl der Zahlungen einer Länge nicht mit
+   den Terminen überein UND fehlt der anderen genau so eine Zahlung, ist eine Verwechslung möglich – dann wird gefragt, welche
+   Zahlung rüberwandert (Vorschlag: die früheste, also die vorab bezahlte). Gibt es keine Wahl, wird ohne Frage verschoben.
+   Fehlt dagegen der anderen Schicht nichts, kann nichts verwechselt worden sein; die Zahlung bleibt „ohne Termin“.
+   Danach: eine Zahlung, die keinem einzelnen Preis entspricht, kann mehrere Massagen decken (2 oder 3 offene Termine, deren Preise sich
+   genau zum Betrag ohne Trinkgeld addieren); das Trinkgeld verteilt sich dann nach Preis. Alles andere bleibt offen und wird gezeigt. */
+function abgleichBerechnen(datum, zahl, versAlt) {
+  const vers = { ...(versAlt || {}) }, grenze = new Date(datum + 'T18:30:00').getTime();
+  const alleT = S.ter.filter(x => x.datum === datum).sort((a, b) => a.zeit.localeCompare(b.zeit));
+  const nrZ = z => vers[z.id] || (z.ms >= grenze ? 2 : 1), langen = Object.keys(MASSAGE_PREISE).map(Number);
+  for (let runde = 0; runde < 30; runde++) {
+    const res = { 1: { treffer: [], offen: [] }, 2: { treffer: [], offen: [] }, frage: null, uebrig: [] }, benutzt = new Set(), zahlen = {}, offenL = {};
+    for (const nr of [1, 2]) for (const L of langen) {
+      const pays = zahl.filter(z => nrZ(z) === nr && z.netto === MASSAGE_PREISE[L]).sort((a, b) => a.ms - b.ms);
+      const ter = alleT.filter(x => terminNr(x.zeit) === nr && terDauer(x) === L), frei = [...pays], offen = [];
+      for (const x of ter) {
+        const ende = new Date(datum + 'T' + minZeit(zeitMin(x.zeit) + L) + ':00').getTime(); let best = -1;
+        frei.forEach((z, i) => { if (best < 0 || Math.abs(z.ms - ende) < Math.abs(frei[best].ms - ende)) best = i; });
+        if (best < 0) { offen.push(x); continue; }
+        const z = frei.splice(best, 1)[0]; benutzt.add(z.id); res[nr].treffer.push({ x, z, tip: z.tip });
+      }
+      zahlen[nr + '|' + L] = { pays, a: ter.length, offen }; offenL[nr + '|' + L] = offen;
+    }
+    // Verwechslung prüfen
+    let bewegt = false;
+    for (const X of [1, 2]) for (const L of langen) {
+      const g = zahlen[X + '|' + L], Y = 3 - X, lack = zahlen[Y + '|' + L].offen.length, c = g.pays.length;
+      if (c <= g.a || !lack) continue;
+      const m = Math.min(c - g.a, lack), kand = g.pays.filter(z => !vers[z.id]);
+      if (!kand.length) continue;
+      if (g.a === 0 && m === c) { for (const z of g.pays) vers[z.id] = Y; bewegt = true; break; }
+      if (!res.frage) res.frage = { L, von: X, nach: Y, kand, n: m };
+    }
+    if (bewegt) continue;
+    // Sammelzahlungen: übrige Zahlung = Summe von 2 oder 3 offenen Terminen
+    const offen = alleT.filter(x => !res[terminNr(x.zeit)].treffer.some(t => t.x === x));
+    const rest = zahl.filter(z => !benutzt.has(z.id)).sort((a, b) => a.ms - b.ms);
+    for (const z of rest) {
+      let best = null;
+      const pr = x => MASSAGE_PREISE[terDauer(x)], mitte = x => new Date(datum + 'T' + minZeit(zeitMin(x.zeit)) + ':00').getTime();
+      const kombi = (start, gew, summe, sel) => {
+        if (summe === z.netto && sel.length >= 2) { const d = sel.reduce((q, x) => q + Math.abs(mitte(x) - z.ms), 0); if (!best || d < best.d) best = { sel: [...sel], d }; return; }
+        if (sel.length === 3 || summe >= z.netto) return;
+        for (let i = start; i < offen.length; i++) { sel.push(offen[i]); kombi(i + 1, gew, summe + pr(offen[i]), sel); sel.pop(); }
+      };
+      if (offen.length >= 2) kombi(0, 0, 0, []);
+      if (!best) { res.uebrig.push(z); continue; }
+      benutzt.add(z.id);
+      for (const x of best.sel) { offen.splice(offen.indexOf(x), 1); res[terminNr(x.zeit)].treffer.push({ x, z, tip: Math.round(z.tip * pr(x) / z.netto), sammel: true }); }
+    }
+    for (const nr of [1, 2]) { res[nr].treffer.sort((a, b) => a.x.zeit.localeCompare(b.x.zeit)); res[nr].offen = offen.filter(x => terminNr(x.zeit) === nr); }
+    return res;
   }
-  return { termine, treffer, offen };
+  return null;
 }
-function vAbgleich(nr) {
-  const datum = U.terDatum || heute(), a = U.abgleich && U.abgleich.datum === datum ? U.abgleich : null;
+function vAbgleich(nr, res, a) {
+  const datum = U.terDatum || heute();
   const anzahl = S.ter.filter(x => x.datum === datum && terminNr(x.zeit) === nr).length;
   let inh = '';
   if (a && a.laeuft) inh = '<div class="mut">Hole Zahlungen von SumUp …</div>';
   else if (a && a.fehler) inh = `<div class="warn">${esc(a.fehler)}</div>`;
-  else if (a && a.zahl) {
-    const z = abgleichZuordnen(datum, nr, a.zahl), tipp = z.treffer.reduce((s2, t) => s2 + t.z.tip, 0);
-    const zeile = t => `<tr><td>${esc(t.x.zeit)}</td><td>${terDauer(t.x)} Min.</td><td>${esc(terName(t.x))}</td><td>${abgleichZeit(t.z.ms)} gezahlt</td><td class="r">${eur(t.z.netto)}</td><td class="r">${t.z.tip ? '+ ' + eur(t.z.tip) + ' Trinkgeld' : ''}</td></tr>`;
-    // Zahlungen, die zu keinem Termin passten, gehören keiner Schicht allein – sie stehen bei beiden, damit nichts verschwindet.
-    const benutzt = new Set(); for (const n of [1, 2]) for (const t of abgleichZuordnen(datum, n, a.zahl).treffer) benutzt.add(t.z.id);
-    const uebrig = a.zahl.filter(q => !benutzt.has(q.id));
-    inh = `<table>${z.treffer.map(zeile).join('')}</table>
-      ${z.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${z.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
-      ${z.treffer.length ? `<div style="margin-top:6px"><b>${z.treffer.length}</b> von ${z.termine.length} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
-      ${uebrig.length ? `<div class="mut" style="margin-top:6px">Zahlungen ab 40 € ohne Termin dieser Länge (Sammelzahlung, andere Schicht oder keine Massage): ${uebrig.map(q => `${abgleichZeit(q.ms)} ${eur(q.brutto)}${q.tip ? ' (davon ' + eur(q.tip) + ' Trinkgeld)' : ''}${q.posten ? ' – ' + esc(q.posten) : ''}`).join('; ')}</div>` : ''}
-      ${a.ohneBeleg ? `<div class="warn" style="margin-top:6px">${a.ohneBeleg} Beleg(e) nicht lesbar – Trinkgeld dort unbekannt.</div>` : ''}`;
+  else if (res) {
+    const r = res[nr], tipp = r.treffer.reduce((q, t) => q + t.tip, 0);
+    const zeile = t => `<tr><td>${esc(t.x.zeit)}</td><td>${terDauer(t.x)} Min.</td><td>${esc(terName(t.x))}</td><td>${abgleichZeit(t.z.ms)} gezahlt${t.sammel ? ' (Sammelzahlung)' : ''}</td><td class="r">${eur(MASSAGE_PREISE[terDauer(t.x)])}</td><td class="r">${t.tip ? '+ ' + eur(t.tip) + ' Trinkgeld' : ''}</td></tr>`;
+    const aufgeht = !r.offen.length && !res.frage && r.treffer.length === anzahl;
+    inh = `<table>${r.treffer.map(zeile).join('')}</table>
+      ${r.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${r.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
+      ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}`;
   }
   return `<div class="mp-abgl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line,#ccc)"><div class="row"><b>${schName(nr)}</b><span class="mut">${anzahl} Massage${anzahl === 1 ? '' : 'n'}</span>
     <button type="button" data-act="mpAbgleich">Abgleich</button></div>${inh}</div>`;
+}
+function vAbgleichBlock() {
+  const datum = U.terDatum || heute(), a = U.abgleich && U.abgleich.datum === datum ? U.abgleich : null;
+  const res = a && a.zahl ? abgleichBerechnen(datum, a.zahl, a.vers) : null;
+  let fr = '', rest = '';
+  if (res && res.frage) {
+    const q = res.frage, ziel = schName(q.nach), von = schName(q.von);
+    fr = `<div class="card" style="margin-top:12px;border:2px solid var(--acc)"><b>Frage:</b> Massage ${q.L} Min. – in der ${von} gibt es ${q.kand.length} Zahlung${q.kand.length === 1 ? '' : 'en'} dieser Länge, die ${ziel} hat ${q.n === 1 ? 'eine' : q.n} ohne Zahlung.
+      Welche Zahlung gehört zur ${ziel}? <span class="mut">(Vorschlag: die früheste – vorab bezahlt)</span>
+      <div class="row" style="margin-top:6px">${q.kand.map((z, i) => `<button type="button" class="${i === 0 ? 'p' : ''}" data-act="mpAbglWahl" data-v="${esc(z.id)}" data-n="${q.nach}">${abgleichZeit(z.ms)} · ${eur(z.brutto)}${z.tip ? ' (Trinkgeld ' + eur(z.tip) + ')' : ''}</button>`).join('')}</div></div>`;
+  }
+  if (res && res.uebrig.length) rest = `<div class="mut" style="margin-top:10px">Zahlungen ab 40 € ohne Termin (keine Massage, nicht zuzuordnen): ${res.uebrig.map(q => `${abgleichZeit(q.ms)} ${eur(q.brutto)}${q.tip ? ' (davon ' + eur(q.tip) + ' Trinkgeld)' : ''}${q.posten ? ' – ' + esc(q.posten) : ''}`).join('; ')}</div>`;
+  if (res && a.ohneBeleg) rest += `<div class="warn" style="margin-top:6px">${a.ohneBeleg} Beleg(e) nicht lesbar – Trinkgeld dort unbekannt.</div>`;
+  return fr + vAbgleich(1, res, a) + vAbgleich(2, res, a) + rest;
 }
 function vMpTag() {
   const datum = U.terDatum || heute(), d = new Date(datum + 'T12:00:00'), wt = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
@@ -1852,7 +1905,7 @@ function vMpTag() {
   return `<div id="mp-tag" class="modal" style="z-index:25" role="dialog" aria-label="Tagesübersicht"><div class="card" style="width:min(820px,100%)">
     <div class="row"><b style="font-size:18px">Tagesübersicht</b></div>
     ${inhalt || '<div class="mut" style="margin:14px 0">Keine Massagen an diesem Tag.</div>'}
-    ${vAbgleich(1)}${vAbgleich(2)}
+    ${vAbgleichBlock()}
     ${gruppen.length ? `<table style="margin-top:10px"><tr><th>Gesamt: ${ges.n} Massage${ges.n === 1 ? '' : 'n'} · ${ges.min} Min.</th><th class="r">${ges.fehlt && !ges.euro ? '–' : eur(ges.euro)}</th></tr>${ges.fehlt ? '<tr><td class="mut" colspan="2">Für Massagen ohne hinterlegten Preis steht „–“ (Preis je Länge: Massage in den Stammdaten mit der Minutenzahl im Namen anlegen, z. B. „Ganzkörper 60“).</td></tr>' : ''}</table>` : ''}
     <div class="row" style="margin-top:12px"><button class="p" data-act="mpTagZu">Schließen</button></div></div></div>`;
 }
@@ -2323,6 +2376,7 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; U.mpTag = false; U.mpMonat = null; },
   mpAuf: () => { U.mpZu = false; },
   mpTag: () => { U.mpTag = true; },
+  mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; } },
   mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
   mpTagZu: () => { U.mpTag = false; U.mpMonat = null; },
   mpMonat: () => { U.mpMonat = (U.terDatum || heute()).slice(0, 7); },
