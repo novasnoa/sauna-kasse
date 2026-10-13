@@ -1642,7 +1642,7 @@ const zeitMin = z => { const [h, m] = String(z).split(':').map(Number); return h
 const minZeit = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const terDauer = x => x.dauer || 60;
 // Name und Telefon zum Anzeigen (ältere Termine hatten die Nummer in einem eigenen Feld).
-const terName = x => [x.gast, x.tel].filter(Boolean).join(' · ');
+const terName = x => (x.fest ? '🔒 ' : '') + [x.gast, x.tel].filter(Boolean).join(' · ');   // 🔒 = abgeglichen und bestätigt, nicht mehr änderbar
 // Name und Telefon gehen gemeinsam im Feld „gast“ an den Schichtplan (dessen Tabelle bleibt so unverändert; Grenze dort: 80 Zeichen).
 // Gekürzt wird der Name, damit die Nummer nie abgeschnitten wird.
 const terGast = x => { const tel = (x.tel || '').trim(), n = (x.gast || '').trim(); return tel ? (n.slice(0, Math.max(0, 80 - tel.length - 3)) + (n ? ' · ' : '') + tel).slice(0, 80) : n.slice(0, 80); };
@@ -1835,9 +1835,14 @@ function abgleichBerechnen(datum, zahl, versAlt) {
   const nrZ = z => vers[z.id] || (z.ms >= grenze ? 2 : 1), langen = Object.keys(MASSAGE_PREISE).map(Number);
   for (let runde = 0; runde < 30; runde++) {
     const res = { 1: { treffer: [], offen: [] }, 2: { treffer: [], offen: [] }, frage: null, uebrig: [] }, benutzt = new Set(), zahlen = {}, offenL = {};
+    // Bestätigte Massagen sind eingefroren: sie behalten Zahlung und Trinkgeld von damals und nehmen am neuen Abgleich nicht mehr teil.
+    for (const x of alleT) if (x.fest) {
+      if (x.zid) benutzt.add(x.zid);
+      res[terminNr(x.zeit)].treffer.push({ x, z: { id: x.zid, ms: x.zms || 0, brutto: 0, tip: x.tip || 0 }, tip: x.tip || 0, sammel: !!x.sammel, fest: true });
+    }
     for (const nr of [1, 2]) for (const L of langen) {
-      const pays = zahl.filter(z => nrZ(z) === nr && z.netto === MASSAGE_PREISE[L]).sort((a, b) => a.ms - b.ms);
-      const ter = alleT.filter(x => terminNr(x.zeit) === nr && terDauer(x) === L), frei = [...pays], offen = [];
+      const pays = zahl.filter(z => !benutzt.has(z.id) && nrZ(z) === nr && z.netto === MASSAGE_PREISE[L]).sort((a, b) => a.ms - b.ms);
+      const ter = alleT.filter(x => !x.fest && terminNr(x.zeit) === nr && terDauer(x) === L), frei = [...pays], offen = [];
       for (const x of ter) {
         const ende = new Date(datum + 'T' + minZeit(zeitMin(x.zeit) + L) + ':00').getTime(); let best = -1;
         frei.forEach((z, i) => { if (best < 0 || Math.abs(z.ms - ende) < Math.abs(frei[best].ms - ende)) best = i; });
@@ -1891,7 +1896,10 @@ function vAbgleich(nr, res, a) {
     inh = `<table>${r.treffer.map(zeile).join('')}</table>
       ${r.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${r.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
       ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
-      ${r.treffer.length && !res.frage ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>' : ''}`;
+      ${r.treffer.length && !res.frage ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>' : ''}
+      ${r.treffer.length && !res.frage ? (r.treffer.some(t => !t.fest)
+        ? `<div class="row" style="margin-top:6px"><button type="button" class="p" data-act="mpAbglBestaetigen" data-n="${nr}">Abgleich bestätigen und festschreiben</button><span class="mut">danach sind diese ${r.treffer.filter(t => !t.fest).length} Massagen nicht mehr änderbar</span></div>`
+        : '<div class="good" style="margin-top:6px">🔒 bestätigt – diese Massagen sind festgeschrieben</div>') : ''}`;
   }
   return `<div class="mp-abgl" style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line,#ccc)"><div class="row"><b>${schName(nr)}</b><span class="mut">${anzahl} Massage${anzahl === 1 ? '' : 'n'}</span>
     <button type="button" data-act="mpAbgleich">Abgleich</button></div>${inh}</div>`;
@@ -1902,7 +1910,7 @@ function abgleichUebernehmen() {
   const a = U.abgleich; if (!a || !a.zahl) return;
   const res = abgleichBerechnen(a.datum, a.zahl, a.vers); if (!res || res.frage) return;
   let neu = false;
-  for (const nr of [1, 2]) for (const t of res[nr].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x && x.tip !== t.tip) { x.tip = t.tip; neu = true; } }
+  for (const nr of [1, 2]) for (const t of res[nr].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x && !x.fest && x.tip !== t.tip) { x.tip = t.tip; neu = true; } }
   if (neu) speichern();
 }
 function vAbgleichBlock() {
@@ -2409,6 +2417,16 @@ const A = {
   mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; U.mpTag = false; U.mpMonat = null; },
   mpAuf: () => { U.mpZu = false; },
   mpTag: () => { U.mpTag = true; },
+  // Der Masseur bestätigt den Abgleich: die zugeordneten Massagen werden eingefroren (fest) und behalten Zahlung und Trinkgeld.
+  // Nicht rückgängig zu machen – deshalb die Rückfrage. Offene Massagen ohne Zahlung bleiben änderbar.
+  mpAbglBestaetigen: (v, el) => {
+    const a = U.abgleich, datum = U.terDatum || heute(); if (!a || !a.zahl || a.datum !== datum) return false;
+    const res = abgleichBerechnen(datum, a.zahl, a.vers); if (!res || res.frage) return false;
+    const neu = res[+el.dataset.n].treffer.filter(t => !t.fest);
+    if (!neu.length || !confirm(`${neu.length} Massage(n) der ${schName(+el.dataset.n)} festschreiben?\nDanach können sie nicht mehr geändert oder gelöscht werden.`)) return false;
+    const jetzt = new Date().toISOString();
+    for (const t of neu) { const x = S.ter.find(q => q.id === t.x.id); if (x) Object.assign(x, { fest: jetzt, zid: t.z.id, zms: t.z.ms, tip: t.tip, sammel: !!t.sammel }); }
+  },
   mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; abgleichUebernehmen(); } },
   mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
   mpTagZu: () => { U.mpTag = false; U.mpMonat = null; },
@@ -2416,12 +2434,13 @@ const A = {
   mpMonatZu: () => { U.mpMonat = null; },
   mpMonatNav: v => { const [j, m] = U.mpMonat.split('-').map(Number), d = new Date(j, m - 1 + (+v), 1, 12); U.mpMonat = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; },
   mpMonatTag: v => { U.terDatum = v; U.terStart = null; U.mpMonat = null; },
-  terEdit: v => { U.terEdit = v; U.terEditDauer = 0; U.terEditZeit = ''; },
+  terEdit: v => { const f = S.ter.find(t => t.id === v); if (f && f.fest) { alert('Diese Massage ist abgeglichen und bestätigt (🔒) – sie kann nicht mehr geändert oder gelöscht werden.'); return false; } U.terEdit = v; U.terEditDauer = 0; U.terEditZeit = ''; },
   terEditLaenge: v => { U.terEditZeit = $v('t-zeit'); U.keepGast = $v('t-gast'); U.keepMas = $v('t-mas'); U.terEditDauer = +v; },
   terEditZu: () => { U.terEdit = null; U.terEditDauer = 0; U.terEditZeit = ''; U.keepGast = null; U.keepMas = null; },
-  terEditWeg: () => { const x = S.ter.find(t => t.id === U.terEdit); if (x && confirm(`Termin ${x.zeit} am ${datumDe(x.datum)} löschen?`)) { S.ter = S.ter.filter(t => t.id !== U.terEdit); A.terEditZu(); } },
+  terEditWeg: () => { const x = S.ter.find(t => t.id === U.terEdit); if (x && x.fest) { alert('Diese Massage ist abgeglichen und bestätigt (🔒) – sie kann nicht mehr geändert oder gelöscht werden.'); return false; } if (x && confirm(`Termin ${x.zeit} am ${datumDe(x.datum)} löschen?`)) { S.ter = S.ter.filter(t => t.id !== U.terEdit); A.terEditZu(); } },
   terEditGo: () => {
     const x = S.ter.find(t => t.id === U.terEdit); if (!x) return A.terEditZu();
+    if (x.fest) { alert('Diese Massage ist abgeglichen und bestätigt (🔒) – sie kann nicht mehr geändert oder gelöscht werden.'); return A.terEditZu(); }
     const zeit = $v('t-zeit'), dauer = U.terEditDauer || terDauer(x), gast = $v('t-gast').trim(), mas = $v('t-mas');
     if (!/^\d{1,2}:\d{2}$/.test(zeit)) { alert('Bitte einen Beginn angeben.'); return false; }
     const start = zeitMin(zeit);
@@ -2430,7 +2449,7 @@ const A = {
     Object.assign(x, { zeit: minZeit(start), dauer, nr: terminNr(minZeit(start)), gast }); delete x.tel; if (mas) x.mas = mas; else delete x.mas;
     A.terEditZu();
   },
-  terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
+  terminWeg: v => { const x = S.ter.find(t => t.id === v); if (x && x.fest) { alert('Diese Massage ist abgeglichen und bestätigt (🔒) – sie kann nicht mehr geändert oder gelöscht werden.'); return false; } if (x && confirm(`Termin ${x.zeit} ${x.was} am ${datumDe(x.datum)} löschen?`)) S.ter = S.ter.filter(t => t.id !== v); },
   planAuf: () => { if (!window.open(SCHICHTPLAN_URL, 'schichtplan', 'popup=yes,width=1000,height=820')) location.href = SCHICHTPLAN_URL; return false; },
   masPlan: () => { $('mas-imp').value = (PLAN.personen || []).join('\n'); A.masImport(); },
   masUeZu: () => { U.masUe = null; },
