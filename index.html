@@ -70,6 +70,11 @@ body.modus-massage main{max-width:none;margin:0;padding:0}
 .mo-tag{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:2px;padding:4px 6px;min-height:0;text-align:left;border:1px solid var(--line);background:#faf6f1;overflow:hidden}
 .mo-tag.aus{opacity:.45}.mo-tag.heute{outline:2px solid var(--acc)}.mo-tag.sel{background:#f3e6d8}
 .mo-kopf{display:flex;justify-content:space-between;align-items:center}.mo-kopf b{font-size:16px}
+.mo-linie{position:relative;display:block;height:7px;margin-top:auto;background:#e6dfd4;border-radius:3px;overflow:hidden;flex:0 0 7px}
+.mo-linie i{position:absolute;top:0;bottom:0;width:1px;background:#8a8a8a;z-index:1}
+.mo-linie b{position:absolute;top:0;bottom:0;background:var(--acc);min-width:2px;border-radius:2px}
+.mo-linie.vorbei b{background:#b8b2aa}
+.mp-gruppe>button.mp-datum{flex:1;font-weight:600}
 .mo-n{background:#222;color:#fff;border-radius:9px;font-size:12px;font-weight:700;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
 .mo-z{display:flex;gap:5px;font-size:14px;line-height:1.25;min-width:0}.mo-z i{font-style:normal;font-weight:700;color:var(--mut);flex:0 0 12px}
 .mo-z span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mo-frei{color:var(--warn);font-weight:700}
@@ -1732,7 +1737,7 @@ function vMpSeite() {
   const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '';
   return `<div class="mp">
     <div class="mp-oben"><b class="mp-titel">Massagetermine</b>
-      <div class="mp-gruppe"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
+      <div class="mp-gruppe"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><button class="mp-datum" data-act="mpMonat" title="Monatsübersicht öffnen">${wt(datum)} ${datumDe(datum)}</button><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
       <button class="mp-rechts" data-act="mpTag">Tagesübersicht</button></div>
     <div class="mp-oben"><b class="mp-titel">Länge</b>
       <div class="mp-gruppe">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div></div>
@@ -1761,8 +1766,7 @@ function vMpTag() {
   };
   const inhalt = gruppen.map(block).join('');
   return `<div id="mp-tag" class="modal" style="z-index:25" role="dialog" aria-label="Tagesübersicht"><div class="card" style="width:min(820px,100%)">
-    <div class="row" style="justify-content:space-between"><b style="font-size:18px">Tagesübersicht</b>
-      <span class="row" style="margin:0"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><b>${wt} ${d.getDate()}.</b><button class="mp-monat" data-act="mpMonat">${MONATE[d.getMonth()]} ${d.getFullYear()}</button><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button></span></div>
+    <div class="row"><b style="font-size:18px">Tagesübersicht</b></div>
     ${inhalt || '<div class="mut" style="margin:14px 0">Keine Massagen an diesem Tag.</div>'}
     ${gruppen.length ? `<table style="margin-top:10px"><tr><th>Gesamt: ${ges.n} Massage${ges.n === 1 ? '' : 'n'} · ${ges.min} Min.</th><th class="r">${ges.fehlt && !ges.euro ? '–' : eur(ges.euro)}</th></tr>${ges.fehlt ? '<tr><td class="mut" colspan="2">Für Massagen ohne hinterlegten Preis steht „–“ (Preis je Länge: Massage in den Stammdaten mit der Minutenzahl im Namen anlegen, z. B. „Ganzkörper 60“).</td></tr>' : ''}</table>` : ''}
     <div class="row" style="margin-top:12px"><button class="p" data-act="mpTagZu">Schließen</button></div></div></div>`;
@@ -1780,13 +1784,15 @@ function vMpMonat() {
   let zellen = '';
   for (let i = 0; i < wochen * 7; i++) {
     const d = new Date(jj, mm - 1, 1 - ersterWt + i, 12), datum = iso(d), im = d.getMonth() === mm - 1, nt = S.ter.filter(x => x.datum === datum).length;
-    zellen += `<button class="mo-tag ${im ? '' : 'aus'} ${datum === heut ? 'heute' : ''} ${datum === U.terDatum ? 'sel' : ''}" data-act="mpMonatTag" data-v="${datum}"><span class="mo-kopf"><b>${d.getDate()}</b>${nt ? `<span class="mo-n">${nt}</span>` : ''}</span>${zeile(datum, 'frueh', 'T')}${zeile(datum, 'spaet', 'A')}</button>`;
+    // Zeitlinie: ein schmaler Streifen 12:00–24:00 mit den eingetragenen Massagen; von vergangenen Tagen grau.
+    const linie = `<span class="mo-linie ${datum < heut ? 'vorbei' : ''}"><i style="left:${(1110 - TK_VON) / (TK_BIS - TK_VON) * 100}%"></i>${S.ter.filter(x => x.datum === datum).map(x => { const a = Math.max(zeitMin(x.zeit), TK_VON), l = Math.min(terDauer(x), TK_BIS - a); return `<b style="left:${(a - TK_VON) / (TK_BIS - TK_VON) * 100}%;width:${l / (TK_BIS - TK_VON) * 100}%" title="${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}"></b>`; }).join('')}</span>`;
+    zellen += `<button class="mo-tag ${im ? '' : 'aus'} ${datum === heut ? 'heute' : ''} ${datum === U.terDatum ? 'sel' : ''}" data-act="mpMonatTag" data-v="${datum}"><span class="mo-kopf"><b>${d.getDate()}</b>${nt ? `<span class="mo-n">${nt}</span>` : ''}</span>${zeile(datum, 'frueh', 'T')}${zeile(datum, 'spaet', 'A')}${linie}</button>`;
   }
   return `<div id="mp-monat" class="modal" style="z-index:28;padding:8px" role="dialog" aria-label="Monatsübersicht"><div class="card mo-card">
     <div class="row" style="justify-content:space-between;margin:0 0 6px"><button data-act="mpMonatNav" data-v="-1" aria-label="Monat zurück">‹</button><b style="font-size:20px">${MONATE[mm - 1]} ${jj}</b><button data-act="mpMonatNav" data-v="1" aria-label="Monat weiter">›</button></div>
     <div class="mo-wt">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<span>${w}</span>`).join('')}</div>
     <div class="mo-grid" style="grid-template-rows:repeat(${wochen},1fr)">${zellen}</div>
-    <div class="row" style="margin:8px 0 0"><button class="p" data-act="mpMonatZu">Schließen</button><span class="mut">T = Tagesschicht, A = Abendschicht · Zahl = Massagetermine · Tag antippen zum Auswählen</span></div></div></div>`;
+    <div class="row" style="margin:8px 0 0"><button class="p" data-act="mpMonatZu">Schließen</button><span class="mut">T = Tagesschicht, A = Abendschicht · Zahl und Linie = Massagetermine (12–24 Uhr, Strich bei 18:30) · Tag antippen zum Auswählen</span></div></div></div>`;
 }
 function vMpStart() {
   return `<div class="mp mp-leer"><h1>Olivin</h1><button class="p" data-act="mpAuf">Massagetermine</button></div>`;

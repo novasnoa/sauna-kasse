@@ -118,3 +118,6 @@ von Massagetermine); in schmalen Fenstern schrumpfen beide gleich. Ganz rechts o
 wenn der Preis bekannt ist – Betrag. Der Preis je Länge kommt aus den Massagen in den Stammdaten, deren Name die Minutenzahl enthält („Ganzkörper 60“); ohne Treffer steht „–“.
 Ein Klick auf den Monat in der Tagesübersicht öffnet die **Monatsübersicht** (nahezu bildschirmfüllend): je Tag die eingeplanten Masseur*innen (T = Tagesschicht, A = Abendschicht, rot = frei)
 laut Schichtplan und die Zahl der Termine; Tippen auf einen Tag wählt ihn aus.
+
+**Korrektur (13.10.2026):** Die Tagesübersicht trägt kein Datum; sie gilt immer für den Tag, der auf der Hauptseite gewählt ist. Die **Monatsübersicht** öffnet ein Tipp auf das Datum auf der Hauptseite (statt des
+Datumsfelds); Tag antippen wählt ihn. In jeder Tageszelle steht unter den Namen eine kleine **Zeitlinie** (12–24 Uhr, Strich bei 18:30) mit den eingetragenen Massagen; bei vergangenen Tagen grau.
