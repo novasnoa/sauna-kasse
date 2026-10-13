@@ -181,3 +181,7 @@ wenn ein anderes Gerät die Massage vor dem Abgleich noch geändert hat. Gemesse
 die Massagen ohne Zahlung im Abgleich. Dazu **E-Mail** (mailto, Empfänger aus den Stammdaten: Name ohne „Massage“ hinten verglichen; fehlt die Adresse, bleibt er leer und ein Hinweis steht da), **in Gmail öffnen** und **Text kopieren**.
 Keine Google-Anmeldung und kein automatischer Versand: die Mail öffnet das Mailprogramm des Geräts bzw. Gmail im Browser. **Offen:** ein Berichtsversand an den Schichtplan (dort ist nur das Trinkgeld je Massage angekommen); sobald klar ist, was dort stehen soll.
 Gemessen mit Attrappen (Zuordnung, Bericht beider Schichten, Mail-Link mit Adresse).
+
+**Bericht an den Schichtplan (13.10.2026):** `berichtPush(datum, res)` schickt die Berichte beider Schichten (Text je Masseur*in, `fest` = alle Massagen der Schicht bestätigt) per `PUT …/api/kasse/bericht` mit demselben Schlüssel wie die Termine. Automatisch bei jeder Änderung des Abgleichs (nach `abgleichUebernehmen`) und nach dem Bestätigen,
+aber nur, wenn sich der Inhalt seit dem letzten Versand geändert hat (Stand je Tag in `sk-berichte-sent`). Solange eine Frage offen ist, wird nichts gesendet. Fehlschläge zeigt die Schicht neben „✓ Trinkgeld im Schichtplan“ an und werden beim nächsten Abgleich wiederholt.
+Im Schichtplan stehen die Berichte auf der Seite „Abrechnung“. **Voraussetzung dort:** `migration-berichte.sql` ausführen und ausliefern; sonst antwortet er mit 503 und die Kasse meldet „Tabelle für Berichte fehlt noch“. Gemessen mit Attrappen beider Seiten.

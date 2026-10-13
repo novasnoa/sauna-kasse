@@ -1932,7 +1932,7 @@ function vAbgleich(nr, res, a) {
     inh = `<table>${r.treffer.map(zeile).join('')}</table>
       ${r.offen.length ? `<div class="warn" style="margin-top:6px">Ohne passende Zahlung: ${r.offen.map(x => `${esc(x.zeit)} ${terDauer(x)} Min.`).join(', ')}</div>` : ''}
       ${anzahl ? `<div style="margin-top:6px">${aufgeht ? '✓ geht auf – ' : ''}<b>${r.treffer.length}</b> von ${anzahl} Massagen zugeordnet · Trinkgeld ${eur(tipp)}</div>` : ''}
-      ${r.treffer.length && !res.frage ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler ? ' – <span class="warn">' + esc(terminFehler) + '</span>' : '') + '</div>' : ''}
+      ${r.treffer.length && !res.frage ? '<div class="good" style="margin-top:6px">✓ Trinkgeld im Schichtplan' + (terminFehler || berichtFehler ? ' – <span class="warn">' + esc(terminFehler || berichtFehler) + '</span>' : '') + '</div>' : ''}
       ${r.treffer.length && !res.frage ? (r.treffer.some(t => !t.fest)
         ? `<div class="row" style="margin-top:6px"><button type="button" class="p" data-act="mpAbglBestaetigen" data-n="${nr}">Abgleich bestätigen und festschreiben</button><span class="mut">danach sind diese ${r.treffer.filter(t => !t.fest).length} Massagen nicht mehr änderbar</span></div>`
         : '<div class="good" style="margin-top:6px">🔒 bestätigt – diese Massagen sind festgeschrieben</div>') : ''}
@@ -1943,12 +1943,31 @@ function vAbgleich(nr, res, a) {
 }
 // Automatisch bei jeder Änderung des Abgleichs (Abruf, beantwortete Frage): das zugeordnete Trinkgeld je Termin (Cent) in `tip` schreiben, speichern
 // und damit an den Schichtplan schicken (speichern → terminPush). Solange eine Frage offen ist, geschieht nichts – eine halbe Zuordnung wird nicht gesendet.
+// Schickt die Berichte beider Schichten eines Tages an den Schichtplan (PUT …/api/kasse/bericht, gleicher Schlüssel wie die Termine). Je Tag und Schicht wird dort alles
+// ersetzt; gesendet wird nur, wenn sich der Inhalt seit dem letzten Versand geändert hat. Fehlschläge bleiben stumm und werden beim nächsten Abgleich wiederholt.
+const BERICHT_SENT = 'sk-berichte-sent';
+async function berichtPush(datum, res) {
+  if (!navigator.onLine || !res || res.frage) return;
+  const schichten = {};
+  for (const nr of [1, 2]) schichten[schichtArt(nr)] = abgleichBerichte(datum, nr, res[nr]).map(b => ({ masseur: b.mas, text: b.text, fest: res[nr].treffer.length > 0 && res[nr].treffer.every(t => t.fest) }));
+  const stand = JSON.stringify({ datum, schichten });
+  let gesendet = {}; try { gesendet = JSON.parse(lsGet(BERICHT_SENT) || '{}') || {}; } catch (e) {}
+  if (gesendet[datum] === stand) return;
+  try {
+    const r = await fetch(SCHICHTPLAN_URL + 'api/kasse/bericht', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Schichtplan': '1', Authorization: 'Bearer ' + TERMIN_SCHLUESSEL }, body: stand });
+    if (!r.ok) throw new Error(r.status === 503 ? 'Schichtplan: Tabelle für Berichte fehlt noch' : 'Schichtplan antwortet mit ' + r.status);
+    gesendet[datum] = stand; lsSet(BERICHT_SENT, JSON.stringify(gesendet)); berichtFehler = ''; berichtOk = uhr();
+  } catch (e) { berichtFehler = e.message === 'Failed to fetch' ? 'Keine Verbindung zum Schichtplan' : e.message; }
+  if (U.mpTag) render();
+}
+let berichtFehler = '', berichtOk = '';
 function abgleichUebernehmen() {
   const a = U.abgleich; if (!a || !a.zahl) return;
   const res = abgleichBerechnen(a.datum, a.zahl, a.vers); if (!res || res.frage) return;
   let neu = false;
   for (const nr of [1, 2]) for (const t of res[nr].treffer) { const x = S.ter.find(q => q.id === t.x.id); if (x && !x.fest && x.tip !== t.tip) { x.tip = t.tip; neu = true; } }
   if (neu) speichern();
+  berichtPush(a.datum, res);
 }
 function vAbgleichBlock() {
   const datum = U.terDatum || heute(), a = U.abgleich && U.abgleich.datum === datum ? U.abgleich : null;
@@ -2468,7 +2487,9 @@ const A = {
     const neu = res[+el.dataset.n].treffer.filter(t => !t.fest);
     if (!neu.length || !confirm(`${neu.length} Massage(n) der ${schName(+el.dataset.n)} festschreiben?\nDanach können sie nicht mehr geändert oder gelöscht werden.`)) return false;
     const jetzt = new Date().toISOString();
+    const fertig = () => berichtPush(datum, abgleichBerechnen(datum, a.zahl, a.vers));
     for (const t of neu) { const x = S.ter.find(q => q.id === t.x.id); if (x) Object.assign(x, { fest: jetzt, zid: t.z.id, zms: t.z.ms, tip: t.tip, sammel: !!t.sammel }); }
+    setTimeout(fertig, 0);
   },
   mpAbglWahl: (v, el) => { const a = U.abgleich; if (a) { a.vers = a.vers || {}; a.vers[v] = +el.dataset.n; abgleichUebernehmen(); } },
   mpAbgleich: () => { abgleichHolen(U.terDatum || heute()); return false; },
