@@ -97,3 +97,14 @@ Ein Gerät ohne Eintrag gilt als buchend – nichts ändert sich, solange nieman
 Trinkgeld, „An Solo senden“, „Alle Buchungen löschen“ und das Einspielen einer Sicherung. Außerdem laufen dort **nicht**: die automatische Verlängerungsbuchung und der
 automatische Mailversand. Erlaubt bleiben: Abrechnung/Auswertungen ansehen, Stammdaten (auch Mitarbeiter*innen), Termine, Massageplan, Sicherung herunterladen.
 Oben zeigt ein Chip „👁 nur lesen“ an, dass das Gerät nicht bucht. Zurückstellen geht jederzeit in den Stammdaten (sie sind auch auf lesenden Geräten erreichbar).
+
+## Modus „nur Massageplan“ (Stand 13.10.2026)
+
+Solange die Kasse nicht kassiert (rechtliche Klärung offen, siehe `docs/kassensichv-gobd-luecken.md`), zeigt die App **nur eine Seite**: Massagetermine (Tageswahl) · Länge
+(30/40/45/60/90) · Tagesschicht mit Name der Eingeteilten und Slots 12:00–18:25 · Abendschicht mit Name und Slots ab 18:30 · links **Schließen**, rechts grün **Reservieren**.
+Die Seite füllt den Bildschirm und scrollt nicht (geprüft von 1024×690 bis 1366×1024 und im Hochformat). **Schließen** führt zu einer Startseite mit der Taste „Massagetermine“.
+Abgeschaltet im Code (`modusMassage()`): Kasse, Abrechnung, Stammdaten, Kartengerät, Menü, Geräteliste und die Automatik (Verlängerung, Mail); `darfBuchen()` ist dort false.
+Der Hintergrundabgleich (Google, Termine an den Schichtplan) läuft weiter.
+
+**Umschalten bis zum eigenen Schalter:** Adresse `https://sauna-kassensystem.web.app/?modus=voll` zeigt die ganze Kasse, `…/?modus=massage` wieder nur den Massageplan. Die Wahl
+bleibt auf dem Gerät gespeichert. Voreinstellung im Code: `MODUS_STANDARD`. Für Anmeldung bei Google, Stammdaten oder SumUp also einmal auf `?modus=voll` gehen und danach zurückstellen.

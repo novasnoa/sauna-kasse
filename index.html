@@ -43,6 +43,24 @@ label{display:inline-flex;align-items:center;gap:8px;min-height:48px}
 .tip button{min-width:64px}
 button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
 button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+body.modus-massage header{display:none}
+body.modus-massage main{max-width:none;margin:0;padding:0}
+.mp{height:100vh;height:100dvh;display:flex;flex-direction:column;gap:6px;padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overflow:hidden}
+.mp-oben{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.mp-oben button,.mp-oben input,.mp-unten button{min-height:44px;padding:6px 14px}
+.mp-titel{min-width:128px;font-size:17px}
+.mp-block{display:flex;flex-direction:column;min-height:0}
+.mp-kopf{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:2px 0 2px 34px;min-height:30px}
+.mp-sch{font-size:13px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.mp-slots{flex:1;min-height:0;display:grid;border:1px solid var(--line);border-radius:var(--rk);overflow:hidden}
+.mp-zeile{display:grid;grid-template-columns:30px repeat(12,1fr);min-height:0}
+.mp-h{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;background:#f1ece5;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.mp .tk{min-height:0;height:100%;padding:0 2px;font-size:12px}
+.mp-unten{flex:0 0 auto;display:flex;align-items:center;gap:10px;justify-content:space-between}
+.mp-mitte{flex:1;text-align:center;font-size:15px}
+.mp-leer{align-items:center;justify-content:center;gap:24px}
+.mp-leer h1{margin:0;color:var(--acc)}
+.mp-leer button{min-height:64px;font-size:20px;padding:0 32px}
 #pin{max-width:360px;margin:24px auto;text-align:center}
 #pin-punkte{font-size:34px;letter-spacing:10px;min-height:48px;margin:6px 0}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
@@ -279,7 +297,7 @@ const rechnung = (um, ti) => {
   const g = um + ti, netto = ustNetto(g), massMit = Math.round(um * MASSEUR_PROZENT / 100), massOhne = Math.round(ustNetto(um) * MASSEUR_PROZENT / 100), tkOhne = ustNetto(ti);
   return { um, ti, g, netto, mwst: g - netto, massMit, massOhne, tkOhne, mit: massMit + ti, ohne: massOhne + tkOhne };
 };
-const U = { terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
+const U = { mpZu: false, terEdit: null, terEditDauer: 0, terEditZeit: '', keepGast: null, terPop: null, terDatum: '', terDauer: 60, terStart: null, termine: false, plan: false, schUe: null, schUeTag: false, masUe: null, masFrage: null, suPay: null, suEntsperren: null, frei: 0, pinEin: '', pinFehl: 0, pinSperreBis: 0, pinReset: false, rec: '', symZiel: null, neuIcon: {}, editIcon: '', art: 'Karte', oeffnen: false, extra: false, extraSel: [], neu: false, pop: null, gastZu: false, edit: null, keep: null, form: null, tab: 'kasse', sch: null, gast: null, mas: '', abr: null, fuer: 'ges', st: 'ma' };
 
 function laden() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return migriere(s); } catch (e) {}
@@ -719,6 +737,7 @@ function modalSperre() {
   else if (!offen && b.classList.contains('modal-offen')) { b.classList.remove('modal-offen'); b.style.top = ''; window.scrollTo(0, U.scrollY || 0); }
 }
 function render() {
+  if (modusMassage()) return renderMassage();
   if (darfBuchen() && verlaengerungenPruefen()) speichern();
   // Es gibt nur eine Hauptseite (die Kasse, erreichbar über „Olivin“); Abrechnung und Stammdaten sind Verweise daneben.
   // Abrechnung und Stammdaten stehen hinter einem gemeinsamen Menüsymbol; im Menü sind sie wieder getrennte Einträge.
@@ -875,8 +894,15 @@ if (!G.dev) { G.dev = id(); lsSet('sk-dev', G.dev); }
    jedem offenen Gerät). Ein Gerät ohne Eintrag zählt als buchend – so ändert sich nichts, solange niemand etwas umstellt. Die Rolle liegt je Gerät in S.ger
    und wandert mit dem Google-Abgleich; festgelegt wird sie in den Stammdaten (Geräte), auch von einem anderen Gerät aus. „Nur lesen“ sperrt, was Schichten,
    Gäste, Buchungen und Zahlungen verändert; Stammdaten, Termine und Auswertungen bleiben möglich. */
+/* ---------- Modus „nur Massageplan“ ----------
+   Solange die Kasse nicht kassiert (rechtliche Klärung offen, siehe docs/kassensichv-gobd-luecken.md), zeigt die App nur den Massageplan mit der
+   Terminreservierung; alles andere (Kasse, Abrechnung, Stammdaten, Kartengerät, Automatik) ist im Code abgeschaltet. Umgeschaltet wird bis zu einem
+   eigenen Schalter über die Adresse: …/?modus=voll (alles) bzw. …/?modus=massage; die Wahl bleibt auf dem Gerät gespeichert. */
+const MODUS_STANDARD = 'massage';
+const MODUS = (() => { try { const q = new URLSearchParams(location.search).get('modus'); if (q === 'voll' || q === 'massage') lsSet('sk-modus', q); } catch (e) {} return lsGet('sk-modus') || MODUS_STANDARD; })();
+const modusMassage = () => MODUS === 'massage';
 const geraet = () => S.ger.find(x => x.id === G.dev && !x.weg);
-const darfBuchen = () => { const g = geraet(); return !g || g.bucht !== false; };
+const darfBuchen = () => { if (modusMassage()) return false; const g = geraet(); return !g || g.bucht !== false; };   // im Modus „nur Massageplan“ bucht niemand
 const SCHREIBEND = new Set(['oeffnen', 'wechselOk', 'bearbOk', 'schliessen', 'gastNeu', 'gastFrei', 'geht', 'zurueck', 'buche', 'masBuche', 'buchWeg', 'zahlen', 'zahlWeg', 'extraBuchen', 'suSenden', 'suKnopf', 'buchungenLoeschen']);
 const geraeteName = () => {
   const ua = navigator.userAgent || '', ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
@@ -1639,6 +1665,62 @@ function vTerPop() {
     <div class="row"><button data-act="terPopZu">Abbrechen</button></div>
   </div></div>`;
 }
+// ---------- Modus „nur Massageplan“: eine Seite ohne Scrollen ----------
+// Aufbau von oben: Titel + Tageswahl · Länge · Tagesschicht (Name, Slots 12:00–18:25) · Abendschicht (Name, Slots ab 18:30) · Schließen / Reservieren.
+// Die Höhe teilt sich der Bildschirm: die Zeilen der Slots strecken sich, deshalb muss auf dem iPad nichts gescrollt werden.
+const MP_SPALTEN = 12;
+// Eine Massage zerfällt in Teile: je Stundenzeile und je Schichtblock (Grenze 18:30) einer – so bekommt jeder Teil seinen Rahmen.
+function mpTeile(b) {
+  const t = [];
+  for (let r = Math.floor(b.a / 60); r <= Math.floor((b.b - 1) / 60); r++)
+    for (const [von, bis] of [[r * 60, Math.min((r + 1) * 60, 1110)], [Math.max(r * 60, 1110), (r + 1) * 60]]) {
+      const x = Math.max(b.a, von), y = Math.min(b.b, bis); if (y > x) t.push([x, y]);
+    }
+  return t;
+}
+function mpBlock(art, datum, dauer, sel, belegt) {
+  const stunden = art === 'frueh' ? [12, 13, 14, 15, 16, 17, 18] : [18, 19, 20, 21, 22, 23];
+  const zeilen = stunden.map(h => {
+    let z = `<span class="mp-h">${h}</span>`;
+    for (let q = 0; q < 60; q += TK_RASTER) {
+      const m = h * 60 + q, drin = art === 'frueh' ? m < 1110 : m >= 1110;
+      if (!drin) { z += '<span></span>'; continue; }
+      const b = belegt.find(t => m >= t.a && m < t.b), ok = !b && terMoeglich(datum, m, dauer), im = sel !== null && m >= sel && m < sel + dauer;
+      let rand = '', kopf = '';
+      if (b) {
+        const teile = mpTeile(b), teil = teile.find(p => m >= p[0] && m < p[1]), gross = teile.reduce((g, p) => (p[1] - p[0] > g[1] - g[0] ? p : g), teile[0]);
+        rand = `bt bb ${m === teil[0] ? 'bl' : ''} ${m === teil[1] - TK_RASTER ? 'br' : ''}`;
+        if (m === gross[0]) kopf = `<em class="tk-bl" style="width:calc(${(gross[1] - gross[0]) / TK_RASTER} * 100% - 8px)">${ikone('massage', 18)}<b>${esc(b.x.zeit)}–${minZeit(b.b)}</b><span>${esc(terName(b.x))}</span></em>`;
+      }
+      z += `<button class="tk ${art === 'spaet' ? 'abend' : ''} ${b ? 'belegt ' + rand : ok ? '' : 'weg'} ${im ? 'sel' : ''}" ${b ? `data-act="terEdit" data-v="${b.x.id}"` : ok ? `data-act="terSlot" data-v="${m}"` : 'disabled'} title="${minZeit(m)}${b ? ' – ' + esc(b.x.zeit) + '–' + minZeit(b.b) + ' ' + esc(terName(b.x)) : ''}">${b ? kopf : `<span>:${String(q).padStart(2, '0')}</span>`}</button>`;
+    }
+    return `<div class="mp-zeile">${z}</div>`;
+  }).join('');
+  return `<div class="mp-block" style="flex:${stunden.length}"><div class="mp-kopf"><span class="mp-sch">${art === 'frueh' ? 'Tagesschicht' : 'Abendschicht'}</span><span class="tk-wer">${eingeteilt(datum, art)}</span></div><div class="mp-slots" style="grid-template-rows:repeat(${stunden.length},1fr)">${zeilen}</div></div>`;
+}
+function vMpSeite() {
+  const datum = U.terDatum || (U.terDatum = heute()), dauer = U.terDauer || 60, sel = U.terStart, belegt = terBelegt(datum);
+  const wt = d => ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(d + 'T12:00:00').getDay()];
+  const status = terminFehler ? `<span class="warn">${esc(terminFehler)}</span>` : terminOk ? `<span class="good">Im Schichtplan, ${terminOk} Uhr</span>` : '';
+  return `<div class="mp">
+    <div class="mp-oben"><b class="mp-titel">Massagetermine</b>
+      <button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><input id="t-datum" type="date" value="${datum}"><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
+    <div class="mp-oben"><b class="mp-titel">Länge</b>${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div>
+    ${mpBlock('frueh', datum, dauer, sel, belegt)}${mpBlock('spaet', datum, dauer, sel, belegt)}
+    <div class="mp-unten"><button data-act="mpZu">Schließen</button>
+      <span class="mp-mitte">${sel !== null ? `<b>${wt(datum)} ${datumDe(datum)} · ${minZeit(sel)}–${minZeit(sel + dauer)}</b> · ${schName(terminNr(minZeit(sel)))}` : '<span class="mut">Zeit antippen</span>'} ${status}</span>
+      <button class="ok" data-act="terminNeu">Reservieren</button></div></div>`;
+}
+function vMpStart() {
+  return `<div class="mp mp-leer"><h1>Olivin</h1><button class="p" data-act="mpAuf">Massagetermine</button></div>`;
+}
+function renderMassage() {
+  document.body.classList.add('modus-massage');
+  $('app').innerHTML = U.mpZu ? vMpStart() : vMpSeite();
+  if (U.terPop) { $('app').insertAdjacentHTML('beforeend', vTerPop()); if ($('t-gast')) $('t-gast').focus(); }
+  if (U.terEdit) { $('app').insertAdjacentHTML('beforeend', vTerEdit()); if (U.keepGast !== null && $('t-gast')) $('t-gast').value = U.keepGast; }
+  modalSperre();
+}
 function vTermine() {
   const liste = terminAnzeige();
   const datum = U.terDatum || (U.terDatum = heute()), dauer = U.terDauer || 60, sel = U.terStart;
@@ -2032,6 +2114,8 @@ const A = {
   },
   terGo: () => { terBuche($v('t-gast')); },
   terPopZu: () => { U.terPop = null; },
+  mpZu: () => { U.mpZu = true; U.terPop = null; U.terEdit = null; },
+  mpAuf: () => { U.mpZu = false; },
   terEdit: v => { U.terEdit = v; U.terEditDauer = 0; U.terEditZeit = ''; },
   terEditLaenge: v => { U.terEditZeit = $v('t-zeit'); U.keepGast = $v('t-gast'); U.terEditDauer = +v; },
   terEditZu: () => { U.terEdit = null; U.terEditDauer = 0; U.terEditZeit = ''; U.keepGast = null; },
