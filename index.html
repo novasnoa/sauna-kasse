@@ -72,8 +72,8 @@ body.modus-massage main{max-width:none;margin:0;padding:0}
 .mo-tag{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:2px;padding:4px 6px;min-height:0;text-align:left;border:1px solid var(--line);background:#faf6f1;overflow:hidden}
 .mo-tag.aus{opacity:.45}.mo-tag.heute{outline:2px solid var(--acc)}.mo-tag.sel{background:#f3e6d8}
 .mo-kopf{display:flex;justify-content:space-between;align-items:center}.mo-kopf b{font-size:16px}
-.mo-linie{position:relative;display:block;height:7px;margin-top:auto;background:#e6dfd4;border-radius:3px;overflow:hidden;flex:0 0 7px}
-.mo-linie i{position:absolute;top:0;bottom:0;width:1px;background:#8a8a8a;z-index:1}
+.mo-linien{display:flex;flex-direction:column;gap:3px;margin-top:auto;flex:0 0 auto}
+.mo-linie{position:relative;display:block;height:5px;background:#e6dfd4;border-radius:3px;overflow:hidden;flex:0 0 5px}
 .mo-linie b{position:absolute;top:0;bottom:0;background:var(--acc);min-width:2px;border-radius:2px}
 .mo-linie.vorbei b{background:#b8b2aa}
 .mp-gruppe>button.mp-datum{flex:1;font-weight:600}
@@ -1967,15 +1967,21 @@ function vMpMonat() {
   let zellen = '';
   for (let i = 0; i < wochen * 7; i++) {
     const d = new Date(jj, mm - 1, 1 - ersterWt + i, 12), datum = iso(d), im = d.getMonth() === mm - 1, nt = S.ter.filter(x => x.datum === datum).length;
-    // Zeitlinie: ein schmaler Streifen 12:00–24:00 mit den eingetragenen Massagen; von vergangenen Tagen grau.
-    const linie = `<span class="mo-linie ${datum < heut ? 'vorbei' : ''}"><i style="left:${(1110 - TK_VON) / (TK_BIS - TK_VON) * 100}%"></i>${S.ter.filter(x => x.datum === datum).map(x => { const a = Math.max(zeitMin(x.zeit), TK_VON), l = Math.min(terDauer(x), TK_BIS - a); return `<b style="left:${(a - TK_VON) / (TK_BIS - TK_VON) * 100}%;width:${l / (TK_BIS - TK_VON) * 100}%" title="${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}"></b>`; }).join('')}</span>`;
+    // Zwei kleine Zeitstrahlen unter den Namen, ohne Beschriftung: oben die Frühschicht (12:00–18:30), darunter die Abendschicht (18:30–24:00).
+    // Eine Massage über die Grenze hinweg erscheint in beiden Strahlen mit ihrem jeweiligen Teil; von vergangenen Tagen grau.
+    const tagTermine = S.ter.filter(x => x.datum === datum);
+    const strahl = (v, bis) => `<span class="mo-linie ${datum < heut ? 'vorbei' : ''}">${tagTermine.map(x => {
+      const a = Math.max(zeitMin(x.zeit), v), e = Math.min(zeitMin(x.zeit) + terDauer(x), bis); if (e <= a) return '';
+      return `<b style="left:${(a - v) / (bis - v) * 100}%;width:${(e - a) / (bis - v) * 100}%" title="${esc(x.zeit)}–${minZeit(zeitMin(x.zeit) + terDauer(x))}"></b>`;
+    }).join('')}</span>`;
+    const linie = `<span class="mo-linien">${strahl(TK_VON, 1110)}${strahl(1110, TK_BIS)}</span>`;
     zellen += `<button class="mo-tag ${im ? '' : 'aus'} ${datum === heut ? 'heute' : ''} ${datum === U.terDatum ? 'sel' : ''}" data-act="mpMonatTag" data-v="${datum}"><span class="mo-kopf"><b>${d.getDate()}</b>${nt ? `<span class="mo-n">${nt}</span>` : ''}</span>${zeile(datum, 'frueh', 'T')}${zeile(datum, 'spaet', 'A')}${linie}</button>`;
   }
   return `<div id="mp-monat" class="modal" style="z-index:28;padding:8px" role="dialog" aria-label="Monatsübersicht"><div class="card mo-card">
     <div class="row" style="justify-content:space-between;margin:0 0 6px"><button data-act="mpMonatNav" data-v="-1" aria-label="Monat zurück">‹</button><b style="font-size:20px">${MONATE[mm - 1]} ${jj}</b><button data-act="mpMonatNav" data-v="1" aria-label="Monat weiter">›</button></div>
     <div class="mo-wt">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<span>${w}</span>`).join('')}</div>
     <div class="mo-grid" style="grid-template-rows:repeat(${wochen},1fr)">${zellen}</div>
-    <div class="row" style="margin:8px 0 0"><button class="p" data-act="mpMonatZu">Schließen</button><span class="mut">T = Tagesschicht, A = Abendschicht · Zahl und Linie = Massagetermine (12–24 Uhr, Strich bei 18:30) · Tag antippen zum Auswählen</span></div></div></div>`;
+    <div class="row" style="margin:8px 0 0"><button class="p" data-act="mpMonatZu">Schließen</button><span class="mut">T = Tagesschicht, A = Abendschicht · Zahl und Strahlen = Massagetermine (oben Tagesschicht 12–18:30 Uhr, unten Abendschicht 18:30–24 Uhr) · Tag antippen zum Auswählen</span></div></div></div>`;
 }
 function vMpStart() {
   return `<div class="mp mp-leer"><h1>Olivin</h1><button class="p" data-act="mpAuf">Massagetermine</button></div>`;
