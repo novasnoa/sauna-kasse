@@ -54,6 +54,8 @@ body.modus-massage main{max-width:none;margin:0;padding:0}
 .mp-gruppe>*{min-width:0}.mp-gruppe input{flex:1}.mp-gruppe .chip{flex:1;padding:6px 2px}
 .mp-gruppe>button:not(.chip){flex:0 0 auto}
 .mp-rechts{margin-left:auto}
+.mp-oben #mp-wolke,.mp-oben .mp-rechts{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 10px}
+.mp-oben #mp-wolke{max-width:170px}
 .mp-block{display:flex;flex-direction:column;min-height:0}
 .mp-kopf{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:2px 0 2px 34px;min-height:30px}
 .mp-sch{font-size:13px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
@@ -1193,7 +1195,10 @@ function gStatus(st, fehler) {
   w.textContent = t[0]; w.dataset.act = t[1];
   w.style.cssText = st === 'anmelden' || st === 'fehler' ? 'background:#fde8e4;color:var(--warn);border-color:var(--warn)' : 'background:transparent;color:#fff;border:1px solid #ffffff80';
   const z = $('g-status'); if (z) z.textContent = gText();
+  const m = $('mp-wolke'); if (m) m.textContent = gMpText();
 }
+// Im Massageplan fehlt die Kopfzeile mit der Wolke; der Knopf neben der Tagesübersicht ersetzt sie (Anmelden, Abgleich von Hand).
+const gMpText = () => !G.an ? '☁ Google anmelden' : ({ ok: '☁ ✓ ' + G.zeit, sync: '☁ gleicht ab …', anmelden: '☁ Bei Google anmelden', fehler: '☁ Fehler – antippen', offline: '☁ kein Netz' }[G.status] || '☁ abgleichen');
 const gText = () => ({ ok: 'Verbunden – zuletzt abgeglichen um ' + G.zeit + '.', sync: 'Gleicht ab …', anmelden: 'Bitte bei Google anmelden (Knopf oben).', fehler: 'Fehler beim Abgleich: ' + G.fehler, offline: 'Kein Netz – es wird abgeglichen, sobald wieder Netz da ist.', aus: 'Ausgeschaltet.' }[G.status] || (G.an ? 'Noch nicht abgeglichen.' : 'Ausgeschaltet.'));
 function vSync() {
   return `<div class="card"><h2>☁ Abgleich über Google</h2>
@@ -1751,7 +1756,7 @@ function vMpSeite() {
   return `<div class="mp">
     <div class="mp-oben"><b class="mp-titel">Massagetermine</b>
       <div class="mp-gruppe"><button data-act="terTag" data-v="-1" aria-label="Tag zurück">‹</button><button class="mp-datum" data-act="mpMonat" title="Monatsübersicht öffnen">${wt(datum)} ${datumDe(datum)}</button><button data-act="terTag" data-v="1" aria-label="Tag weiter">›</button><button data-act="terTag" data-v="0">Heute</button></div>
-      <button class="mp-rechts" data-act="mpTag">Tagesübersicht</button></div>
+      <button class="mp-rechts" data-act="mpTag">Tagesübersicht</button><button id="mp-wolke" data-act="gMp" title="Google-Anmeldung und Abgleich">${gMpText()}</button></div>
     <div class="mp-oben"><b class="mp-titel">Länge</b>
       <div class="mp-gruppe">${TK_LAENGEN.map(l => `<button class="chip ${l === dauer ? 'on' : ''}" data-act="terLaenge" data-v="${l}">${l} Min.</button>`).join('')}</div></div>
     ${mpBlock('frueh', datum, dauer, sel, belegt)}${mpBlock('spaet', datum, dauer, sel, belegt)}
@@ -2319,6 +2324,7 @@ const A = {
   gAus: () => { if (confirm('Google-Abgleich auf diesem Gerät ausschalten? Die Daten hier bleiben erhalten.')) { G.an = false; G.tok = ''; lsSet('sk-gsync', '0'); gStatus('aus'); } },
   gJetzt: () => { gSync(false, true); return false; },
   gLogin: () => { gSync(true); return false; },
+  gMp: () => { if (!G.an) return A.gAn(); if (G.status === 'anmelden') gSync(true); else gSync(false, true); return false; },
   kopiere: v => {
     const t = MT[v];
     (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => alert('Text kopiert – jetzt in eine Mail einfügen.'), () => prompt('Zum Kopieren Strg+C drücken:', t));

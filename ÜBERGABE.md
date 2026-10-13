@@ -144,3 +144,7 @@ Schicht gehört (Vorschlag: die früheste, also die vorab bezahlte); bei mehrere
 nichts, bleibt die Zahlung „ohne Termin“. **Sammelzahlungen:** passt der Betrag ohne Trinkgeld zur Summe von 2 oder 3 offenen Terminen, gilt sie für diese; das Trinkgeld wird nach Preis verteilt
 (Trinkgeld × Preis ÷ Betrag ohne Trinkgeld). Zahlungen, die auch so zu nichts passen (z. B. Massage plus Ware), bleiben offen und werden gezeigt. Antworten gelten nur bis zum nächsten Abgleich; gespeichert wird nichts.
 Gemessen mit Attrappe: Vorauszahlung (Frage, Antwort, Neuberechnung) und Sammelzahlung mit Trinkgeld. Offen: Stufe 3 (Bericht).
+
+**Google-Knopf im Massageplan (13.10.2026):** Rechts neben „Tagesübersicht“ steht ein Knopf „☁ Google anmelden“ (`#mp-wolke`, Aktion `gMp`, Beschriftung `gMpText()`). Ungebunden: meldet bei Google an und gleicht ab; danach zeigt er „☁ ✓ Uhrzeit“, antippen = Abgleich von Hand,
+bei abgelaufener Anmeldung „Bei Google anmelden“. Zweck: am Rechner (Büro) mit demselben Google-Konto Termine eintragen und sehen – Termine liegen im Abgleich (`ter`), der Rechner darf schreiben (Termine stehen nicht in `SCHREIBEND`).
+Der Abgleich bleibt Handarbeit (`GOOGLE_AUTO = false`). Geprüft: Darstellung bei 1024, 820, 768 Breite ohne Überlauf; die Anmeldung selbst nur bis zum Klick (Google ist in der Testumgebung gesperrt).
