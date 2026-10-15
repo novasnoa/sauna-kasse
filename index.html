@@ -305,6 +305,9 @@ body.modal-offen{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 </header>
 <main id="app"></main>
 
+<!-- Vor dem Hauptskript: Im Testmodus lenkt es Speicher und SumUp-Aufrufe um, bevor die Kasse ihren Stand liest. Sonst tut es nichts.
+     Relativ eingebunden, weil die Kasse auch unter einem Unterpfad läuft (GitHub Pages). -->
+<script src="sumup-dummy.js"></script>
 <script>
 'use strict';
 const KEY = 'saunakasse-v1';
@@ -607,7 +610,7 @@ function vPinVerwaltung() {
 const SUMUP = 'https://api.sumup.com';
 /* ---------- Kartengerät: Zugangsdaten, Zahlung am Solo ----------
    Ablauf: „An Solo senden“ schickt den Betrag an das gekoppelte Solo (POST …/readers/{id}/checkout, mit Trinkgeld-Prozenten,
-   die die Kundin am Gerät wählt). Danach fragt die Kasse alle 2,5 Sekunden die Zahlung ab (GET …/transactions?foreign_transaction_id=…)
+   die die Kundin am Gerät wählt). Danach fragt die Kasse alle 2,5 Sekunden die Zahlung ab (GET …/transactions?client_transaction_id=…)
    und bucht bei „SUCCESSFUL“ Betrag und Trinkgeld, das SumUp meldet (tip_amount; amount enthält es). Eine Rückruf-Adresse (Webhook)
    gibt es nicht – dafür bräuchte es einen Server. Fällt das Internet aus, bleibt das Eintippen am Gerät als Rückfall.
    Zugangsdaten: API-Schlüssel und Affiliate-Schlüssel liegen nur VERSCHLÜSSELT im Browser (AES-GCM, Schlüssel aus einem eigenen Code per
@@ -656,8 +659,14 @@ async function sumupAnfrage(pfad, schluessel, optionen) {
     return { fehler: true, erreichbar, ms: Date.now() - t0 };
   }
 }
-const suFehlerText = r => r.fehler ? (r.erreichbar ? 'SumUp erreichbar, aber der Browser darf die Antwort nicht lesen (CORS).' : 'Keine Verbindung zu SumUp.')
-  : `SumUp meldet HTTP ${r.status}${r.json && (r.json.detail || r.json.message || r.json.title) ? ': ' + (r.json.detail || r.json.message || r.json.title) : ''}.`;
+// SumUp antwortet je nach Endpunkt in drei Formen: Problem+JSON {detail, title}, alt {message, error_code} und beim Reader {errors: {type, detail}}
+// (etwa READER_BUSY, READER_OFFLINE) – jede soll ihren Text zeigen, nicht nur die Statusnummer.
+const suFehlerText = r => {
+  if (r.fehler) return r.erreichbar ? 'SumUp erreichbar, aber der Browser darf die Antwort nicht lesen (CORS).' : 'Keine Verbindung zu SumUp.';
+  const j = r.json || {}, f = j.errors && typeof j.errors === 'object' ? j.errors : {};
+  const text = String(j.detail || j.message || j.title || f.detail || '').trim().replace(/\.+$/, '');
+  return `SumUp meldet HTTP ${r.status}${text ? ': ' + text : ''}${f.type ? ` (${f.type})` : ''}.`;
+};
 
 // ---- Zahlung am Solo ----
 function suText(t) { if (U.suPay) U.suPay.text = t; const e = $('su-pay-text'); if (e) e.textContent = t; }
@@ -684,7 +693,11 @@ async function suWarten(p) {
   while (U.suPay && U.suPay.p && U.suPay.p.ftid === p.ftid && Date.now() < bis) {
     await new Promise(r => setTimeout(r, 2500));
     if (!U.suPay || !U.suPay.p || U.suPay.p.ftid !== p.ftid || U.suPay.phase === 'ok') return;
-    const r = await sumupAnfrage(`/v2.1/merchants/${suEnc(code)}/transactions?foreign_transaction_id=${suEnc(p.ftid)}`, SU.key);
+    // Nachgefragt wird mit der client_transaction_id aus der Antwort auf den Checkout: Die gibt SumUp immer zurück. Die eigene Kennung (ftid)
+    // kommt nur mit dem Affiliate-Schlüssel bei SumUp an – ohne ihn bliebe die Nachfrage bis zum Zeitlimit bei 404. Die ftid gilt nur noch
+    // für eine offene Zahlung, die vor dieser Änderung gesendet wurde.
+    const frage = p.ctid ? `client_transaction_id=${suEnc(p.ctid)}` : `foreign_transaction_id=${suEnc(p.ftid)}`;
+    const r = await sumupAnfrage(`/v2.1/merchants/${suEnc(code)}/transactions?${frage}`, SU.key);
     if (!U.suPay || U.suPay.p.ftid !== p.ftid) return;
     if (r.fehler) { suText('Keine Verbindung – ich versuche es weiter …'); continue; }
     if (r.status === 404) { suText('Warte darauf, dass die Zahlung am Gerät gestartet wird …'); continue; }
@@ -711,6 +724,7 @@ async function suSenden(b) {
   const r = await sumupAnfrage(`/v0.1/merchants/${suEnc(code)}/readers/${suEnc(geraet)}/checkout`, SU.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!U.suPay || U.suPay.p.ftid !== ftid) return;
   if (r.fehler || !r.ok) { suEnde('fehler', suFehlerText(r) + ' Es wurde nichts gebucht – bitte am Gerät eintippen.'); return; }
+  p.ctid = (r.json && r.json.data && r.json.data.client_transaction_id) || '';
   lsSet(SU_PEND, JSON.stringify(p)); U.suPay.phase = 'warte'; suText('Bitte am Kartengerät bezahlen.'); behalte(); render();
   suWarten(p);
 }
@@ -762,7 +776,11 @@ function vSumup() {
     <div class="row"><button class="p" data-act="suSpeichern">Verschlüsselt speichern</button>
       ${suDa() && !suOffen() ? '<button data-act="suEntsperrenKnopf">Entsperren</button>' : ''}${suDa() ? '<button class="x" style="font-size:16px;padding:10px 14px" data-act="suLoeschen">Zugang löschen</button>' : ''}</div>
     <div class="warn" id="su-msg"></div>
-    <div class="mut">Der API-Schlüssel aus dem Feld oben wird mitgespeichert. Den Code brauchen Sie einmal je Start der Kasse. Geht er verloren, löschen Sie den Zugang und tragen ihn neu ein.</div></div>`;
+    <div class="mut">Der API-Schlüssel aus dem Feld oben wird mitgespeichert. Den Code brauchen Sie einmal je Start der Kasse. Geht er verloren, löschen Sie den Zugang und tragen ihn neu ein.</div></div>
+  <div class="card"><h2>🧪 Testmodus</h2>
+    <div class="mut">Spielt Zahlungen mit einem nachgestellten SumUp durch: simuliertes Solo, eigene Produkte, Testgäste, Störungen und ein Protokoll jedes Aufrufs.
+    Im Testmodus arbeitet die Kasse mit einem eigenen, leeren Speicher; nichts geht an SumUp, an Google oder an den Schichtplan. Beim Beenden ist alles wieder wie vorher.</div>
+    <div class="row">${window.SUMUP_TEST && SUMUP_TEST.aktiv ? '<button data-sumup-test="aus">Testmodus beenden</button>' : '<button class="p" data-sumup-test="ein">Testmodus starten</button>'}</div></div>`;
 }
 
 /* ---------- Anzeige ---------- */

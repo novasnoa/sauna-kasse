@@ -3,7 +3,7 @@
    fehlt oder hängt, kommt die zuletzt gespeicherte Fassung. Die Buchungsdaten selbst liegen ohnehin im
    Browser (localStorage) und brauchen kein Netz. */
 const CACHE = 'sauna-kasse-v1';
-const DATEIEN = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const DATEIEN = ['./', 'index.html', 'sumup-dummy.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(DATEIEN)).then(() => self.skipWaiting()));

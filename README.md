@@ -53,6 +53,14 @@ mit; das Trinkgeld kommt aus der Antwort). Der Knopf zeigt den Stand: blau berei
 rot nicht bezahlt. Ob das Solo ohne gesendete Prozente Trinkgeld anbietet, sagt die SumUp-Doku nicht – erst der Test zeigt es; sonst den zweiten
 Schalter ausschalten. Gesondertes Trinkgeld bleibt über „Sonstiges Trinkgeld“.
 
+Nach dem Senden fragt die Kasse mit der `client_transaction_id` nach, die SumUp auf den Checkout zurückgibt – nicht mit der eigenen Kennung
+(`foreign_transaction_id`): Die kommt laut SumUp-Spezifikation nur mit dem Affiliate-Schlüssel an, ohne ihn liefe jede Nachfrage bis zum Zeitlimit ins Leere.
+
+**Testmodus** (unter „Kartengerät“ oder `?testmodus=1`): ein nachgestelltes SumUp in `sumup-dummy.js` – simuliertes Solo (bezahlt mit Trinkgeld,
+abgelehnt, abgebrochen, offline, verfallen), Produkte wie im SumUp, Testgäste mit Schlüssel, Störungen und ein Protokoll jedes Aufrufs. Die Kasse
+arbeitet dabei mit eigenem, leerem Speicher; nichts geht an SumUp, Google oder den Schichtplan. Dieselbe Datei liegt im Schichtplan-Repo
+(`public/sumup-dummy.js`) – Änderungen an beiden Stellen gleich halten. Die volle Kasse dafür mit `?modus=voll` öffnen.
+
 ## Kartenzahlung
 
 Bei Zahlart „Karte“ steht im Zahlblock der Betrag groß (Betrag + Trinkgeld), damit man ihn am Kartengerät nur abtippt.
