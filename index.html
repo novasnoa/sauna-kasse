@@ -1062,7 +1062,7 @@ function gLade() {
 // Abfragen von fremden Adressen – die Kasse kann ihn deshalb nicht selbst auslesen. Statt dessen holt ihn die Veröffentlichung
 // (tools/plan-holen.mjs, alle 30 Min.) und legt ihn als plan.json neben die Kasse; hier wird nur diese Datei gelesen.
 // Der echte Plan lässt sich weiter als eigenes Fenster öffnen (dort bleibt man angemeldet wie sonst auch).
-const SCHICHTPLAN_URL = 'https://sauna-schichtplan.sauna-schichtplan.workers.dev/';
+const SCHICHTPLAN_URL = 'https://schichtplan.saunaolivin.workers.dev/';
 const MAIL_RECHT = 'https://www.googleapis.com/auth/gmail.send';
 // Es darf immer nur EINE Anmeldeanfrage bei Google laufen. Grund: Die Freigabe öffnet ein Google-Fenster zur Kontenwahl. Der Abgleich im
 // Hintergrund (2,5 s nach jedem Speichern, alle 30 s, beim Zurückkehren in die App) fragt sonst gleichzeitig „still“ (prompt: none) an – und

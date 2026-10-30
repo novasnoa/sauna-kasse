@@ -5,7 +5,7 @@
 // SCHICHTPLAN_PASSWORT, nie im Quelltext. Die Daten gelten als praktisch öffentlich (Vorgabe des Betreibers).
 import { writeFileSync, appendFileSync } from 'node:fs';
 
-const PLAN = process.env.SCHICHTPLAN_URL || 'https://sauna-schichtplan.sauna-schichtplan.workers.dev';
+const PLAN = process.env.SCHICHTPLAN_URL || 'https://schichtplan.saunaolivin.workers.dev';
 const LIVE = process.env.KASSE_PLAN_URL || 'https://sauna-kassensystem.web.app/plan.json';
 const passwort = process.env.SCHICHTPLAN_PASSWORT;
 const ausgabe = (k, v) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); console.log(`${k}=${v}`); };
